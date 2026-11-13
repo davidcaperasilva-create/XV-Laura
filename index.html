@@ -197,6 +197,8 @@ footer .sig{font-family:var(--f-display);font-size:46px;color:var(--aqua-deep);l
 .adminrow label{flex:1}
 .admin-only{display:none}
 body.is-admin .admin-only{display:block}
+.admin-nav{display:none!important}
+body.is-admin .admin-nav{display:inline-block!important}
 .qr-wrap{text-align:center;margin:14px 0}
 .qrbox{display:inline-block;background:#fff;padding:12px;border-radius:18px;box-shadow:var(--soft-shadow)}
 .qrbox img,.qrbox canvas{display:block}
@@ -241,7 +243,7 @@ body.is-admin .admin-only{display:block}
     <a href="#fotos">Fotos</a>
     <a href="#retos">Retos</a>
     <a href="#mensajes">Mensajes</a>
-    <a href="#fotos" class="cta" id="openShow">Pantalla del salón</a>
+    <a href="#fotos" class="cta admin-nav" id="openShow">Pantalla del salón</a>
   </div></div>
 </nav>
 
@@ -691,7 +693,7 @@ function onNewItems(items){
   if(showOpen&&!paused&&!$("stage").querySelector("video")){clearShowTimer();showTimer=setTimeout(goNext,1000);}
 }
 $("openShow").addEventListener("click",e=>{
-  e.preventDefault();$("show").classList.add("open");showOpen=true;paused=false;$("pauseShow").textContent="Pausar";pos=-1;hist=[];queue=[];
+  e.preventDefault();if(!editor)return;$("show").classList.add("open");showOpen=true;paused=false;$("pauseShow").textContent="Pausar";pos=-1;hist=[];queue=[];
   drawShowQR();goNext();schedule();
   try{const r=document.documentElement.requestFullscreen&&document.documentElement.requestFullscreen();if(r&&r.catch)r.catch(()=>{});}catch(_){}
 });
