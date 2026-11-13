@@ -232,6 +232,17 @@ body.is-admin .admin-nav{display:inline-block!important}
 .show .msgcard .q:before{content:"\201C";display:block;font-family:var(--f-display);font-size:1.6em;line-height:.6;color:var(--rose);margin-bottom:12px}
 .show .msgcard .w{margin-top:22px;font-family:var(--f-display);font-size:clamp(28px,4vw,46px);color:#f9c9d6}
 .show .msgcard .k{margin-top:4px;font-size:13px;letter-spacing:.2em;text-transform:uppercase;opacity:.7}
+.reto .lead{display:flex;gap:10px;align-items:center;background:rgba(255,255,255,.7);border-radius:14px;padding:6px;margin-top:4px}
+.reto .lead img,.reto .lead .vt{width:48px;height:48px;border-radius:10px;object-fit:cover;flex:none;background:var(--aqua-soft)}
+.reto .lead .vt{display:grid;place-items:center;font-size:20px}
+.reto .lead span{font-size:13px;line-height:1.3}
+.reto .btns{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
+.toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 18px;border-radius:999px;font-size:14px;font-weight:600;z-index:30;box-shadow:var(--soft-shadow);max-width:90vw;text-align:center}
+.show .wincard{display:flex;flex-direction:column;align-items:center;gap:14px;text-align:center}
+.show .wincard .tr{font-size:13px;letter-spacing:.25em;text-transform:uppercase;color:#f9c9d6}
+.show .wincard .rt{font-family:var(--f-display);font-size:clamp(34px,5vw,60px);line-height:1.05}
+.show .wincard{padding-top:30px}.show .wincard .frame img,.show .wincard .frame video{max-height:calc(100vh - 380px)!important}
+.show .wincard .wn{font-size:clamp(18px,2.4vw,26px);font-weight:700}
 @media (max-width:480px){
   .tl:before{left:90px}
   .tl li{grid-template-columns:78px 1fr;gap:26px}
@@ -315,7 +326,7 @@ body.is-admin .admin-nav{display:inline-block!important}
   </div></section>
 
   <section id="retos"><div class="wrap">
-    <div class="head"><h2>Retos de fotos</h2><p class="lede">Misiones para los invitados. Cada foto queda guardada en su reto.</p></div>
+    <div class="head"><h2>Retos con premio</h2><p class="lede">Cumple un reto con tu foto y vota con ♥ por la más bonita de cada reto. Tienes un voto por reto. Al final de la noche se anuncian las ganadoras en la pantalla y se entrega un premio.</p></div>
     <div class="retos" id="retosList"></div>
   </div></section>
 
@@ -353,6 +364,7 @@ body.is-admin .admin-nav{display:inline-block!important}
     <button class="btn ghost" type="button" id="adminOut" hidden>Salir del modo organizador</button>
   </details>
 </footer>
+<div class="toast" id="toast" hidden></div>
 </div>
 
 <div class="show" id="show" role="dialog" aria-label="Pantalla del salón">
@@ -361,6 +373,7 @@ body.is-admin .admin-nav{display:inline-block!important}
     <button class="btn close" id="prevShow" type="button" aria-label="Anterior">‹</button>
     <button class="btn close" id="pauseShow" type="button">Pausar</button>
     <button class="btn close" id="nextShow" type="button" aria-label="Siguiente">›</button>
+    <button class="btn close" id="winShow" type="button">🏆 Ganadores</button>
     <button class="btn close" id="closeShow" type="button">Cerrar</button>
   </div>
   <div class="new" id="showNew">¡Nueva!</div>
@@ -459,12 +472,16 @@ function screenList(){
   const l=photos.filter(p=>!p.oculta);
   return ($("showMode")&&$("showMode").value==="mejores")?l.filter(isBest):l;
 }
-function matchF(p,f){return f==="Todas"||(f==="Videos"?p.tipo==="video":p.momento===f);}
+function matchF(p,f){if(f.startsWith("reto:"))return p.reto===RETOS[+f.slice(5)];return f==="Todas"||(f==="Videos"?p.tipo==="video":p.momento===f);}
+const fLabel=f=>f.startsWith("reto:")?"Reto: "+RETOS[+f.slice(5)]:f;
+let toastT=null;function toast(t){const el=$("toast");el.textContent=t;el.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>el.hidden=true,3500);}
+let votos={};try{votos=JSON.parse(store.get("xv_votos")||"{}")||{};}catch(_){votos={};}
+function leader(r){return photos.filter(p=>!p.oculta&&p.reto===r).sort((a,b)=>(b.likes||0)-(a.likes||0)||(String(a.created_at)<String(b.created_at)?-1:1))[0]||null;}
 function renderFilters(){
   const list=photoList();
-  const used=["Todas"].concat(list.some(p=>p.tipo==="video")?["Videos"]:[],MOMENTOS.filter(m=>list.some(p=>p.momento===m)));
+  const used=["Todas"].concat(list.some(p=>p.tipo==="video")?["Videos"]:[],MOMENTOS.filter(m=>list.some(p=>p.momento===m)),RETOS.map((r,i)=>"reto:"+i).filter(f=>list.some(p=>matchF(p,f))));
   if(!used.includes(filter))filter="Todas";
-  $("filters").innerHTML=used.map(m=>'<button type="button" aria-pressed="'+(m===filter)+'" data-f="'+esc(m)+'">'+esc(m)+' · '+list.filter(p=>matchF(p,m)).length+'</button>').join("");
+  $("filters").innerHTML=used.map(m=>'<button type="button" aria-pressed="'+(m===filter)+'" data-f="'+esc(m)+'">'+esc(fLabel(m))+' · '+list.filter(p=>matchF(p,m)).length+'</button>').join("");
 }
 $("filters").addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;filter=b.dataset.f;renderPhotos();});
 const ROT=[-3,2,-1.5,3,-2,1.2,-2.6,2.4];
@@ -495,11 +512,14 @@ function renderPhotos(force){
 function renderRetos(){
   const list=photoList();
   $("retosList").innerHTML=RETOS.map((r,i)=>{
-    const n=list.filter(p=>p.reto===r).length;
-    return '<div class="reto"><div class="n">'+(i+1)+'</div><div class="q">'+esc(r)+'</div><div class="c">'+(n===1?"1 foto":n+" fotos")+'</div><button class="btn ghost" type="button" data-r="'+i+'">Cumplir reto</button></div>';
+    const n=list.filter(p=>p.reto===r).length,L=leader(r);
+    const lead=L&&(L.likes||0)>0?'<div class="lead">'+(L.tipo==="video"?'<div class="vt">▶</div>':'<img alt="" src="'+esc(L.url)+'">')+'<span>Va ganando<br><b>'+esc(L.nombre||"Invitado")+'</b> · ♥ '+(L.likes||0)+'</span></div>':'';
+    return '<div class="reto"><div class="n">'+(i+1)+'</div><div class="q">'+esc(r)+'</div><div class="c">'+(n===1?"1 foto":n+" fotos")+(votos[r]?" · ya votaste":"")+'</div>'+lead+'<div class="btns"><button class="btn ghost" type="button" data-r="'+i+'">Cumplir reto</button>'+(n?'<button class="btn ghost" type="button" data-v="'+i+'">Ver y votar</button>':'')+'</div></div>';
   }).join("");
 }
 $("retosList").addEventListener("click",e=>{
+  const v=e.target.closest("button[data-v]");
+  if(v){filter="reto:"+v.dataset.v;sortBest=true;$("sortBest").setAttribute("aria-pressed","true");$("sortNew").setAttribute("aria-pressed","false");renderPhotos(true);$("filters").scrollIntoView({behavior:"smooth"});return;}
   const b=e.target.closest("button[data-r]");if(!b)return;
   $("upReto").value=RETOS[Number(b.dataset.r)];
   $("fotos").scrollIntoView({behavior:"smooth"});
@@ -722,9 +742,14 @@ $("grid").addEventListener("click",async e=>{
   }
   const l=e.target.closest("button[data-like]");
   if(l){
-    const id=l.dataset.like;if(liked.has(id))return;
+    const id=l.dataset.like;if(liked.has(id)){toast("Ya le diste ♥ a esta foto");return;}
+    const p=photos.find(x=>x.id===id);
+    if(p&&p.reto){
+      if(votos[p.reto]&&votos[p.reto]!==id){toast("Ya votaste en el reto “"+p.reto+"”. Tienes un voto por reto.");return;}
+      votos[p.reto]=id;store.set("xv_votos",JSON.stringify(votos));toast("¡Voto registrado en “"+p.reto+"”!");
+    }
     liked.add(id);store.set("xv_likes",[...liked].join(","));
-    const p=photos.find(x=>x.id===id);if(p)p.likes=(p.likes||0)+1;renderPhotos(true);
+    if(p)p.likes=(p.likes||0)+1;renderPhotos(true);
     sb&&sb.rpc("dar_like",{p_id:id}).then(()=>{}, ()=>{});
     return;
   }
@@ -839,11 +864,29 @@ function display(item){
 let sinceMsg=0,msgPos=-1;
 function msgPool(){return messages.filter(m=>m.texto&&!m.sellado);}
 function goNext(){
+  if(winMode)return;
   const pool=msgPool(),hasPhotos=screenList().length>0;
   if(pool.length&&!queue.length&&(sinceMsg>=3||!hasPhotos)){
     sinceMsg=0;msgPos=(msgPos+1)%pool.length;showMessage(pool[msgPos]);return;
   }
   const it=pickNext();if(it){hist.push(it.p.id);sinceMsg++;}display(it);
+}
+let winMode=false;
+function showWinners(){
+  const ws=RETOS.map(r=>({r,p:leader(r)})).filter(x=>x.p&&(x.p.likes||0)>0);
+  if(!ws.length){toast("Todavía no hay votos en los retos.");return;}
+  winMode=true;clearShowTimer();let i=0;
+  const step=()=>{
+    if(!showOpen||!winMode)return;
+    if(i>=ws.length){winMode=false;goNext();return;}
+    const {r,p}=ws[i++];
+    $("showNew").classList.remove("on");
+    const media=p.tipo==="video"?'<video src="'+esc(p.url)+'" autoplay muted playsinline loop></video>':'<img alt="" src="'+esc(p.url)+'">';
+    $("stage").innerHTML='<div class="wincard"><div class="tr">🏆 Ganador del reto</div><div class="rt">'+esc(r)+'</div><div class="frame">'+media+'</div><div class="wn">'+esc(p.nombre||"Invitado")+' · ♥ '+(p.likes||0)+((p.likes||0)===1?' voto':' votos')+'</div></div>';
+    $("showInfo").textContent="Ganadores de los retos";
+    showTimer=setTimeout(step,10000);
+  };
+  step();
 }
 function showMessage(m){
   clearShowTimer();
@@ -867,7 +910,8 @@ $("openShow").addEventListener("click",e=>{
   drawShowQR();goNext();schedule();wake();
   try{const r=document.documentElement.requestFullscreen&&document.documentElement.requestFullscreen();if(r&&r.catch)r.catch(()=>{});}catch(_){}
 });
-$("nextShow").addEventListener("click",goNext);
+$("nextShow").addEventListener("click",()=>{winMode=false;goNext();});
+$("winShow").addEventListener("click",()=>{paused=false;$("pauseShow").textContent="Pausar";showWinners();});
 $("prevShow").addEventListener("click",goPrev);
 $("pauseShow").addEventListener("click",()=>{
   paused=!paused;$("pauseShow").textContent=paused?"Seguir":"Pausar";
@@ -875,6 +919,7 @@ $("pauseShow").addEventListener("click",()=>{
   if(paused)clearShowTimer();else if(!v)showTimer=setTimeout(goNext,3000);
 });
 $("closeShow").addEventListener("click",()=>{
+  winMode=false;
   $("show").classList.remove("open");showOpen=false;clearShowTimer();$("stage").innerHTML="";schedule();
   try{if(document.fullscreenElement)document.exitFullscreen().catch(()=>{});}catch(_){}
 });
