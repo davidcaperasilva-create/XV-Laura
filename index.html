@@ -243,6 +243,12 @@ body.is-admin .admin-nav{display:inline-block!important}
 .show .wincard .rt{font-family:var(--f-display);font-size:clamp(34px,5vw,60px);line-height:1.05}
 .show .wincard{padding-top:30px}.show .wincard .frame img,.show .wincard .frame video{max-height:calc(100vh - 380px)!important}
 .show .wincard .wn{font-size:clamp(18px,2.4vw,26px);font-weight:700}
+.valsbar{position:sticky;top:0;z-index:7;display:flex;gap:10px;align-items:center;justify-content:center;flex-wrap:wrap;padding:10px 16px;background:var(--rose-soft);color:var(--rose-deep);font-weight:700;text-align:center;box-shadow:var(--soft-shadow)}
+.valsbar .btn{padding:8px 16px;font-size:14px}
+.valsmodal{position:fixed;inset:0;z-index:25;background:rgba(12,43,44,.55);display:flex;align-items:center;justify-content:center;padding:20px}
+.vm{max-width:380px;text-align:center}
+.vm-t{font-family:var(--f-display);font-size:46px;color:var(--rose-deep);line-height:1}
+.vm p{margin:0;color:var(--ink)}
 @media (max-width:480px){
   .tl:before{left:90px}
   .tl li{grid-template-columns:78px 1fr;gap:26px}
@@ -274,6 +280,19 @@ body.is-admin .admin-nav{display:inline-block!important}
   </div>
 </header>
 
+<div class="valsbar" id="valsBar" hidden>
+  <span>💃 ¡Es el vals! Graba un video corto (15 a 30 segundos) y súbelo.</span>
+  <button class="btn rose" type="button" data-vals>Grabar el vals</button>
+</div>
+<div class="valsmodal" id="valsModal" hidden role="dialog" aria-label="Es el vals">
+  <div class="card vm">
+    <div class="vm-t">¡Empezó el vals!</div>
+    <p>Graba un video corto, de 15 a 30 segundos, del vals de Laura Michelle. Se guarda en el álbum y sale en la pantalla del salón.</p>
+    <button class="btn rose" type="button" data-vals>Grabar el vals ahora</button>
+    <button class="btn ghost" type="button" id="valsLater">Ahora no</button>
+  </div>
+</div>
+<input type="file" id="valsCam" accept="video/*" capture="environment" hidden>
 <nav aria-label="Secciones">
   <div class="wrap"><div class="pill">
     <a href="#itinerario">Itinerario</a>
@@ -304,7 +323,7 @@ body.is-admin .admin-nav{display:inline-block!important}
     <div class="head"><h2>Fotos y videos</h2><p class="lede">Sube tus fotos y videos desde el celular, sobre todo del vals. Aparecen al instante aquí y en la pantalla del salón, y quedan como álbum para descargar.</p></div>
 
     <form class="card" id="upForm">
-      <label class="pick" for="file"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-2.5h6L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.6"/></svg><span id="pickTxt">Toca para elegir una foto o un video</span><span class="note">Videos de hasta 50 MB (más o menos 30 a 40 segundos). Cada foto y video se revisa antes de publicarse.</span>
+      <label class="pick" for="file"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-2.5h6L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.6"/></svg><span id="pickTxt">Toca para elegir una foto o un video</span><span class="note">Videos de máximo 45 segundos (50 MB). Cada foto y video se revisa antes de publicarse.</span>
         <input type="file" id="file" accept="image/*,video/*">
       </label>
       <div class="row">
@@ -357,6 +376,7 @@ body.is-admin .admin-nav{display:inline-block!important}
       <button class="btn" type="submit">Entrar</button>
     </form>
     <p class="note" id="adminState"></p>
+    <p class="note admin-only" id="adminSpace"></p>
     <div class="qr-wrap admin-only">
       <div id="qrBox" class="qrbox"></div>
       <p class="note">Código QR para las mesas. Toma captura e imprímelo.<br><span id="qrUrl"></span></p>
@@ -621,6 +641,15 @@ async function checkVideo(file){
 }
 
 /* ---------- Subir ---------- */
+const MAX_SEG=45;
+let pendingFile=null;
+function videoSecs(file){
+  return new Promise(ok=>{
+    const u=URL.createObjectURL(file),v=document.createElement("video");v.preload="metadata";v.muted=true;
+    const done=d=>{URL.revokeObjectURL(u);ok(d);};
+    v.onloadedmetadata=()=>done(isFinite(v.duration)?v.duration:0);v.onerror=()=>done(0);setTimeout(()=>done(0),8000);v.src=u;
+  });
+}
 const fileIn=$("file");
 function shrink(file){
   return new Promise(res=>{
@@ -636,7 +665,7 @@ function shrink(file){
   });
 }
 fileIn.addEventListener("change",()=>{
-  const f=fileIn.files[0];$("upNote").textContent="";$("upNote").className="note";
+  pendingFile=null;const f=fileIn.files[0];$("upNote").textContent="";$("upNote").className="note";
   $("pickTxt").textContent=f?((f.type.startsWith("video")?"Video listo: ":"Foto lista: ")+f.name):"Toca para elegir una foto o un video";
   if(f&&f.type.startsWith("video")){
     if(f.size>MAX_MB*1048576){$("upNote").textContent="Este video pesa "+Math.round(f.size/1048576)+" MB. El máximo es "+MAX_MB+" MB: recórtalo en tu celular y elígelo otra vez.";$("upNote").className="note err";}
@@ -650,11 +679,12 @@ function extOf(type,isV){
 $("upForm").addEventListener("submit",async e=>{
   e.preventDefault();
   const note=$("upNote");note.className="note";
-  const f=fileIn.files[0];
+  const f=pendingFile||fileIn.files[0];
   if(!f){note.textContent="Primero elige una foto o un video.";note.className="note err";return;}
   const isV=(f.type||"").startsWith("video");
   if(!isV&&!(f.type||"").startsWith("image")){note.textContent="Ese archivo no es una foto ni un video.";note.className="note err";return;}
-  if(isV&&f.size>MAX_MB*1048576){note.textContent="El video pesa más de "+MAX_MB+" MB. Recórtalo en tu celular y súbelo otra vez.";note.className="note err";return;}
+  if(isV&&f.size>MAX_MB*1048576){note.textContent="El video pesa más de "+MAX_MB+" MB. Recórtalo a "+MAX_SEG+" segundos o menos y súbelo otra vez.";note.className="note err";return;}
+  if(isV){const d=await videoSecs(f);if(d>MAX_SEG+1){note.textContent="El video dura "+Math.round(d)+" segundos. El máximo es "+MAX_SEG+": recórtalo en tu celular y súbelo otra vez.";note.className="note err";return;}}
   if(!sb){note.textContent="No se pudo conectar. Recarga la página.";note.className="note err";return;}
   const nombre=$("upName").value.trim().slice(0,40);
   if(hasBad(nombre)){note.textContent=BAD_MSG;note.className="note err";return;}
@@ -665,8 +695,8 @@ $("upForm").addEventListener("submit",async e=>{
     const blob=isV?f:await shrink(f);
     let v="";
     try{v=isV?await checkVideo(f):await checkImage(blob);}catch(_){v="";}
-    if(v==="sexual"){note.className="note err";note.textContent="Este contenido no se puede publicar en los XV de Laura. Elige otra foto o video.";fileIn.value="";$("pickTxt").textContent="Toca para elegir una foto o un video";return;}
-    if(v==="dibujo"){note.className="note err";note.textContent="Esto no parece una foto de la fiesta. Sube fotos o videos tomados en los XV.";fileIn.value="";$("pickTxt").textContent="Toca para elegir una foto o un video";return;}
+    if(v==="sexual"){note.className="note err";note.textContent="Este contenido no se puede publicar en los XV de Laura. Elige otra foto o video.";pendingFile=null;fileIn.value="";$("pickTxt").textContent="Toca para elegir una foto o un video";return;}
+    if(v==="dibujo"){note.className="note err";note.textContent="Esto no parece una foto de la fiesta. Sube fotos o videos tomados en los XV.";pendingFile=null;fileIn.value="";$("pickTxt").textContent="Toca para elegir una foto o un video";return;}
     note.textContent=isV?"Subiendo el video, puede tardar un poco…":"Subiendo…";
     const ct=isV?(f.type||"video/mp4"):"image/jpeg";
     const path=(isV?"videos/":"fotos/")+Date.now()+"-"+Math.random().toString(36).slice(2,8)+"."+extOf(f.type,isV);
@@ -675,14 +705,35 @@ $("upForm").addEventListener("submit",async e=>{
     const ins=await sb.from("fotos").insert({path,tipo:isV?"video":"foto",ct,nombre,momento:$("upMom").value,reto:$("upReto").value||null});
     if(ins.error)throw ins.error;
     note.textContent=isV?"¡Listo! Tu video ya está en el muro.":"¡Listo! Tu foto ya está en el muro.";
-    fileIn.value="";$("pickTxt").textContent="Toca para elegir otra foto o video";$("upReto").value="";
+    pendingFile=null;fileIn.value="";$("pickTxt").textContent="Toca para elegir otra foto o video";$("upReto").value="";
     refresh();
   }catch(err){
     const m=String((err&&(err.message||err.error))||"");
     note.className="note err";
-    note.textContent=isBadErr(err)?BAD_MSG:/size|large|exceed|413/i.test(m)?"El archivo es muy pesado. El máximo es "+MAX_MB+" MB.":"No se pudo subir. Revisa tu conexión e inténtalo otra vez.";
+    note.textContent=isBadErr(err)?BAD_MSG:/row-level|security|403|Unauthorized/i.test(m)?"El álbum se llenó y ya no recibe más archivos. Avísale a los organizadores.":/size|large|exceed|413/i.test(m)?"El archivo es muy pesado. El máximo es "+MAX_MB+" MB.":"No se pudo subir. Revisa tu conexión e inténtalo otra vez.";
   }finally{$("upBtn").disabled=false;}
 });
+
+/* ---------- Vals ---------- */
+const VALS_INI=80,VALS_FIN=110; // 9:20 p. m. a 9:50 p. m.
+function valsTick(){
+  const m=partyMins(),on=m>=VALS_INI&&m<VALS_FIN;
+  $("valsBar").hidden=!on;
+  if(on&&(simSel.value!==""||!store.get("xv_vals_alerta"))&&!showOpen&&$("valsModal").hidden&&!window.__valsShown){$("valsModal").hidden=false;if(simSel.value==="")store.set("xv_vals_alerta","1");try{navigator.vibrate&&navigator.vibrate([200,100,200]);}catch(_){}}
+  if(!on)$("valsModal").hidden=true;
+}
+document.addEventListener("click",e=>{
+  if(!e.target.closest("[data-vals]"))return;
+  $("valsModal").hidden=true;window.__valsShown=true;$("valsCam").click();
+});
+$("valsLater").addEventListener("click",()=>{$("valsModal").hidden=true;window.__valsShown=true;});
+$("valsCam").addEventListener("change",()=>{
+  const f=$("valsCam").files[0];if(!f)return;
+  pendingFile=f;$("pickTxt").textContent="Video del vals listo";
+  $("fotos").scrollIntoView({behavior:"smooth"});
+  setTimeout(()=>{$("upForm").requestSubmit?$("upForm").requestSubmit():$("upBtn").click();$("valsCam").value="";},400);
+});
+setTimeout(valsTick,0);setInterval(valsTick,20000);simSel.addEventListener("change",valsTick);
 
 /* ---------- Mensajes ---------- */
 $("msgForm").addEventListener("submit",async e=>{
@@ -807,7 +858,7 @@ function setEditor(on){
   editor=on;document.body.classList.toggle("is-admin",on);
   $("simRow").hidden=!on;$("adminState").textContent=on?"Modo organizador activo. Ves todo, puedes ocultar fotos y la cápsula del tiempo.":"";
   $("adminForm").hidden=on;$("adminOut").hidden=!on;
-  if(on)drawQR();
+  if(on){drawQR();sb.rpc("album_bytes").then(r=>{if(r&&r.data!=null){const mb=Math.round(r.data/1048576);$("adminSpace").textContent="Espacio usado: "+mb+" MB de 900 MB"+(mb>700?" · ¡casi lleno!":"");}},()=>{});}
   known=null;renderPhotos(true);renderMsgs();refresh();
 }
 $("adminForm").addEventListener("submit",async e=>{
