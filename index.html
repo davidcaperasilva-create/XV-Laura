@@ -223,6 +223,15 @@ body.is-admin .admin-nav{display:inline-block!important}
 .show select option{color:#000}
 .check-note{font-size:13px;color:var(--aqua-deep);margin:0}
 .momchip{border-radius:16px;padding:10px 14px;background:var(--aqua-soft);color:var(--aqua-deep);font-weight:700}
+.ph .acts button.del{background:#fde2e2;color:#a3261e}
+.ph .acts button.del.sure{background:#b3261e;color:#fff}
+.msg .del{margin-top:8px;border:0;background:#fde2e2;color:#a3261e;font-size:12px;font-weight:700;border-radius:999px;padding:4px 10px;cursor:pointer}
+.msg .del.sure{background:#b3261e;color:#fff}
+.show .msgcard{max-width:min(900px,90vw);text-align:center;padding:30px 20px;position:relative}
+.show .msgcard .q{font-family:var(--f-accent);font-style:italic;font-size:clamp(28px,5vw,58px);line-height:1.25;text-wrap:balance;overflow-wrap:anywhere}
+.show .msgcard .q:before{content:"\201C";display:block;font-family:var(--f-display);font-size:1.6em;line-height:.6;color:var(--rose);margin-bottom:12px}
+.show .msgcard .w{margin-top:22px;font-family:var(--f-display);font-size:clamp(28px,4vw,46px);color:#f9c9d6}
+.show .msgcard .k{margin-top:4px;font-size:13px;letter-spacing:.2em;text-transform:uppercase;opacity:.7}
 @media (max-width:480px){
   .tl:before{left:90px}
   .tl li{grid-template-columns:78px 1fr;gap:26px}
@@ -468,7 +477,8 @@ function tile(p,i){
   const lk=liked.has(p.id);
   const b=['<button type="button" class="like'+(lk?" on":"")+'" data-like="'+esc(p.id)+'" aria-label="Me encanta">♥ '+(p.likes||0)+'</button>','<button type="button" data-dl="'+esc(p.id)+'">Descargar</button>'];
   if(editor){b.push('<button type="button" class="star'+(p.destacada?" on":"")+'" data-star="'+esc(p.id)+'">'+(p.destacada?"★ Destacada":"☆ Destacar")+'</button>');
-    b.push('<button type="button" class="hide" data-hide="'+esc(p.id)+'">'+(p.oculta?"Mostrar":"Ocultar")+'</button>');}
+    b.push('<button type="button" class="hide" data-hide="'+esc(p.id)+'">'+(p.oculta?"Mostrar":"Ocultar")+'</button>');
+    b.push('<button type="button" class="del" data-del="'+esc(p.id)+'">Borrar</button>');}
   return '<div class="ph'+(p.oculta?" off":"")+'" data-id="'+esc(p.id)+'" style="--r:'+r+'deg">'+tape+'<div class="im">'+media+(p.destacada?'<span class="stb">★ Mejor</span>':'')+'</div>'+cap+'<div class="acts">'+b.join("")+'</div></div>';
 }
 let lastSig="";
@@ -500,7 +510,7 @@ function renderMsgs(){
   const opened=new Date()>=OPEN_DATE;
   $("msgs").innerHTML=messages.map((m,i)=>{const r=[-1.2,1,-.6,1.4][i%4];
     if(m.sellado&&!opened&&!editor) return '<div class="msg sealed" style="--r:'+r+'deg"><div class="seal">L</div><div><p><b>Mensaje sellado</b></p><div class="by">De '+esc(m.nombre)+' · se abre el 11 de noviembre de 2029</div></div></div>';
-    return '<div class="msg" style="--r:'+r+'deg"><p>'+esc(m.texto)+'</p><div class="by">'+esc(m.nombre)+(m.sellado?" · cápsula del tiempo":"")+'</div></div>';
+    return '<div class="msg" style="--r:'+r+'deg"><p>'+esc(m.texto)+'</p><div class="by">'+esc(m.nombre)+(m.sellado?" · cápsula del tiempo":"")+'</div>'+(editor?'<button type="button" class="del" data-mdel="'+esc(m.id)+'">Borrar mensaje</button>':'')+'</div>';
   }).join("");
 }
 renderPhotos(true);renderMsgs();renderRetos();
@@ -686,10 +696,30 @@ function saveBlob(blob,name){
   setTimeout(()=>URL.revokeObjectURL(url),60000);
 }
 async function getBlob(p){const r=await fetch(p.url);if(!r.ok)throw new Error("fetch");return r.blob();}
+async function borrar(tipo,id){
+  const r=await sb.functions.invoke("admin-borrar",{body:{clave,id,tipo}});
+  if(r.error)throw r.error;
+  return r.data;
+}
+function armSure(btn,fn){
+  if(btn.classList.contains("sure")){btn.disabled=true;btn.textContent="Borrando…";fn().catch(()=>{btn.disabled=false;btn.classList.remove("sure");btn.textContent="No se pudo, reintenta";});return;}
+  const old=btn.textContent;btn.classList.add("sure");btn.textContent="¿Seguro? Toca otra vez";
+  setTimeout(()=>{if(btn.isConnected&&!btn.disabled){btn.classList.remove("sure");btn.textContent=old;}},4000);
+}
+$("msgs").addEventListener("click",e=>{
+  const b=e.target.closest("button[data-mdel]");if(!b||!editor)return;
+  armSure(b,async()=>{await borrar("mensaje",b.dataset.mdel);messages=messages.filter(m=>m.id!==b.dataset.mdel);renderMsgs();});
+});
 $("sortNew").addEventListener("click",()=>{sortBest=false;$("sortNew").setAttribute("aria-pressed","true");$("sortBest").setAttribute("aria-pressed","false");renderPhotos(true);});
 $("sortBest").addEventListener("click",()=>{sortBest=true;$("sortBest").setAttribute("aria-pressed","true");$("sortNew").setAttribute("aria-pressed","false");renderPhotos(true);});
 $("showMode").addEventListener("change",()=>{pos=-1;queue=[];goNext();});
 $("grid").addEventListener("click",async e=>{
+  const dl=e.target.closest("button[data-del]");
+  if(dl&&editor){
+    const id=dl.dataset.del;
+    armSure(dl,async()=>{await borrar("foto",id);photos=photos.filter(x=>x.id!==id);if(known)known.delete(id);renderPhotos(true);});
+    return;
+  }
   const l=e.target.closest("button[data-like]");
   if(l){
     const id=l.dataset.like;if(liked.has(id))return;
@@ -791,6 +821,7 @@ function pickNext(){
 function display(item){
   clearShowTimer();
   const stage=$("stage");
+  if(!item&&msgPool().length){showMessage(msgPool()[(msgPos=(msgPos+1)%msgPool().length)]);return;}
   if(!item){stage.innerHTML='<p style="font-size:26px;text-align:center">Escanea el código y sube tu foto o video.<br>Aparecerá aquí.</p>';$("showInfo").textContent="";$("showNew").classList.remove("on");showTimer=setTimeout(()=>{if(showOpen)goNext();},4000);return;}
   const p=item.p,isV=p.tipo==="video";
   $("showNew").classList.toggle("on",!!item.fresh);
@@ -805,7 +836,24 @@ function display(item){
     showTimer=setTimeout(()=>{if(showOpen&&!paused)goNext();},90000);
   }else showTimer=setTimeout(()=>{if(showOpen&&!paused)goNext();},item.fresh?8000:6000);
 }
-function goNext(){const it=pickNext();if(it)hist.push(it.p.id);display(it);}
+let sinceMsg=0,msgPos=-1;
+function msgPool(){return messages.filter(m=>m.texto&&!m.sellado);}
+function goNext(){
+  const pool=msgPool(),hasPhotos=screenList().length>0;
+  if(pool.length&&!queue.length&&(sinceMsg>=3||!hasPhotos)){
+    sinceMsg=0;msgPos=(msgPos+1)%pool.length;showMessage(pool[msgPos]);return;
+  }
+  const it=pickNext();if(it){hist.push(it.p.id);sinceMsg++;}display(it);
+}
+function showMessage(m){
+  clearShowTimer();
+  $("showNew").classList.remove("on");
+  $("stage").innerHTML='<div class="msgcard"><div class="q"></div><div class="w"></div><div class="k">Mensaje para Laura</div></div>';
+  $("stage").querySelector(".q").textContent=m.texto;
+  $("stage").querySelector(".w").textContent=m.nombre;
+  $("showInfo").textContent="Mensajes de los invitados";
+  if(!paused)showTimer=setTimeout(()=>{if(showOpen&&!paused)goNext();},Math.min(14000,6000+m.texto.length*60));
+}
 function goPrev(){
   if(hist.length<2)return;hist.pop();const id=hist[hist.length-1];const list=screenList();
   const p=list.find(x=>x.id===id);if(!p)return;pos=list.indexOf(p);display({p,fresh:false});
