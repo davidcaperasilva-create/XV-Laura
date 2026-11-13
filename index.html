@@ -193,8 +193,8 @@ footer .sig{font-family:var(--f-display);font-size:46px;color:var(--aqua-deep);l
 .admin{margin:26px auto 0;max-width:420px;text-align:left}
 .admin summary{cursor:pointer;text-align:center;font-size:13px;color:var(--muted);list-style:none}
 .admin summary::-webkit-details-marker{display:none}
-.adminrow{display:flex;gap:10px;align-items:flex-end;margin-top:12px}
-.adminrow label{flex:1}
+.adminrow{display:flex;gap:10px;align-items:flex-end;margin-top:12px;flex-wrap:wrap}
+.adminrow label{flex:1 1 140px}
 .admin-only{display:none}
 body.is-admin .admin-only{display:block}
 .admin-nav{display:none!important}
@@ -314,7 +314,8 @@ body.is-admin .admin-nav{display:inline-block!important}
   <details class="admin">
     <summary>Organizadores</summary>
     <form id="adminForm" class="adminrow">
-      <label class="f" for="adminKey">Clave de organizador<input type="text" id="adminKey" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+      <label class="f" for="adminUser">Usuario<input type="text" id="adminUser" autocomplete="username" autocapitalize="off" spellcheck="false"></label>
+      <label class="f" for="adminKey">Contraseña<input type="password" id="adminKey" autocomplete="current-password"></label>
       <button class="btn" type="submit">Entrar</button>
     </form>
     <p class="note" id="adminState"></p>
@@ -639,10 +640,11 @@ function setEditor(on){
 }
 $("adminForm").addEventListener("submit",async e=>{
   e.preventDefault();
-  const c=$("adminKey").value.trim();if(!c||!sb)return;
+  const u=$("adminUser").value.trim(),k=$("adminKey").value.trim();if(!u||!k||!sb)return;
+  const c=u+"|"+k;
   const r=await sb.rpc("es_admin",{p_clave:c});
   if(r.data===true){clave=c;store.set("xv_clave",c);$("adminKey").value="";setEditor(true);}
-  else $("adminState").textContent="Clave incorrecta.";
+  else $("adminState").textContent="Usuario o contraseña incorrectos.";
 });
 $("adminOut").addEventListener("click",()=>{clave="";store.del("xv_clave");simSel.value="";renderItin();setEditor(false);});
 function siteUrl(){return location.origin+location.pathname;}
