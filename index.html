@@ -381,6 +381,13 @@ body.is-admin .admin-nav{display:inline-block!important}
       <div id="qrBox" class="qrbox"></div>
       <p class="note">Código QR para las mesas. Toma captura e imprímelo.<br><span id="qrUrl"></span></p>
     </div>
+    <div class="admin-only card" style="margin:14px 0;gap:8px">
+      <b>Fotos de la sesión de fotos</b>
+      <p class="note">Sube aquí las fotos profesionales de Laura. Quedan destacadas, en su propia sección, y salen en la pantalla del salón.</p>
+      <label class="btn ghost" for="sesFiles" style="text-align:center">Elegir fotos de la sesión</label>
+      <input type="file" id="sesFiles" accept="image/*" multiple hidden>
+      <p class="note" id="sesNote"></p>
+    </div>
     <button class="btn ghost" type="button" id="adminOut" hidden>Salir del modo organizador</button>
   </details>
 </footer>
@@ -433,7 +440,7 @@ const ITIN=[
  {m:315,h:"1:15 a. m.", t:"Torta y gelatina", d:"Feliz cumpleaños, apaga la vela y fotos grupales", food:1},
  {m:360,h:"2:00 a. m.", t:"Despedida", d:"Gracias por venir"}
 ];
-const MOMENTOS=["Llegada","Entrada","Zapatilla","Vals","Brindis","Última muñeca","Canción","15 deseos","Cena","Sorpresas","Baile","Hora loca","Torta","Despedida"];
+const MOMENTOS=["Sesión de fotos","Llegada","Entrada","Zapatilla","Vals","Brindis","Última muñeca","Canción","15 deseos","Cena","Sorpresas","Baile","Hora loca","Torta","Despedida"];
 const RETOS=["Selfie con la quinceañera","Foto con alguien que no conocías","El mejor paso de la hora loca","Tu mesa completa","La foto más elegante de la noche","Un momento que te hizo llorar o reír"];
 const OPEN_DATE=new Date(2029,10,11);
 const $=id=>document.getElementById(id);
@@ -858,29 +865,65 @@ $("grid").addEventListener("click",async e=>{
     finally{d.disabled=false;d.textContent=txt;}
   }
 });
+/* Álbum para ver sin internet: un .zip con "Abrir álbum.html" + carpeta Fotos */
+function offlineHTML(items,abiertos,sellados){
+  const e=esc,byMom={};
+  items.forEach(it=>{(byMom[it.p.momento||"La fiesta"]=byMom[it.p.momento||"La fiesta"]||[]).push(it);});
+  const orden=MOMENTOS.filter(m=>byMom[m]).concat(Object.keys(byMom).filter(m=>!MOMENTOS.includes(m)));
+  const ganadores=RETOS.map(r=>{const w=items.filter(it=>it.p.reto===r).sort((a,b)=>(b.p.likes||0)-(a.p.likes||0))[0];return w&&(w.p.likes||0)>0?{r,w}:null;}).filter(Boolean);
+  const fig=it=>'<figure><a href="'+e(it.f)+'"><img loading="lazy" src="'+e(it.f)+'" alt=""></a><figcaption>'+(it.p.nombre?"Por "+e(it.p.nombre):"")+(it.p.reto?" · "+e(it.p.reto):"")+((it.p.likes||0)?" · ♥ "+it.p.likes:"")+'</figcaption></figure>';
+  const css='body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;color:#2c3b40;background:linear-gradient(160deg,#e3f5f3,#fff 45%,#fcecf0);background-attachment:fixed;line-height:1.55}main{max-width:1000px;margin:0 auto;padding:0 18px 60px}header{text-align:center;padding:48px 0 20px}h1{font-family:"Snell Roundhand","Apple Chancery",Georgia,serif;font-style:italic;font-weight:400;font-size:clamp(46px,10vw,80px);color:#1d7f78;margin:6px 0}h2{font-family:Georgia,serif;font-style:italic;font-weight:400;color:#1d7f78;font-size:34px;margin:40px 0 12px;text-align:center}h3{color:#b9566f;margin:26px 0 10px}.sub{color:#6b7d81;letter-spacing:.2em;text-transform:uppercase;font-size:12px}.meta{font-family:Georgia,serif;font-style:italic;font-size:20px}.tl{list-style:none;padding:0;max-width:560px;margin:0 auto}.tl li{display:grid;grid-template-columns:96px 1fr;gap:14px;padding:6px 0;border-bottom:1px dashed #cfe7e5}.tl b{color:#1d7f78;font-family:Georgia,serif;font-style:italic;font-weight:400;text-align:right}.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:16px}figure{margin:0;background:#fff;padding:8px 8px 6px;box-shadow:0 10px 24px -14px rgba(0,0,0,.4)}figure img{width:100%;aspect-ratio:1;object-fit:cover;display:block}figcaption{font-size:12px;color:#6b7d81;padding-top:6px;text-align:center}.msgs{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px}.msg{background:#fff;padding:16px;border-radius:6px 20px 6px 20px;box-shadow:0 10px 24px -16px rgba(0,0,0,.4)}.msg p{margin:0 0 6px;font-family:Georgia,serif;font-style:italic;font-size:18px;white-space:pre-wrap}.msg small{color:#6b7d81}.win{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px}.win .r{font-weight:700;color:#b9566f;text-align:center;margin-bottom:6px}details{background:#fff;border-radius:18px;padding:14px 18px;margin-top:14px}summary{cursor:pointer;font-weight:700;color:#b9566f}footer{text-align:center;color:#6b7d81;padding:30px 0;font-family:Georgia,serif;font-style:italic}';
+  let h='<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Mis XV · Laura Michelle · Álbum</title><style>'+css+'</style></head><body><main>';
+  h+='<header><div class="meta">Mis XV años</div><h1>Laura Michelle</h1><div class="sub">Capera Bustamante</div><p class="meta">Sábado 14 de noviembre de 2026 · Marañón</p><p class="sub">'+items.length+' fotos · '+abiertos.length+(abiertos.length===1?' mensaje':' mensajes')+'</p></header>';
+  h+='<h2>Itinerario</h2><ul class="tl">'+ITIN.map(it=>'<li><b>'+e(it.h)+'</b><span>'+e(it.t)+(it.d?'<br><small>'+e(it.d)+'</small>':'')+'</span></li>').join("")+'</ul>';
+  if(ganadores.length)h+='<h2>Ganadores de los retos</h2><div class="win">'+ganadores.map(g=>'<div><div class="r">🏆 '+e(g.r)+'</div>'+fig(g.w)+'</div>').join("")+'</div>';
+  h+='<h2>Fotos de la noche</h2>'+orden.map(m=>'<h3>'+e(m)+'</h3><div class="grid">'+byMom[m].map(fig).join("")+'</div>').join("");
+  if(abiertos.length)h+='<h2>Mensajes para Laura</h2><div class="msgs">'+abiertos.map(m=>'<div class="msg"><p>'+e(m.texto)+'</p><small>'+e(m.nombre)+'</small></div>').join("")+'</div>';
+  if(sellados.length)h+='<details><summary>Cápsula del tiempo · ábrela el 11 de noviembre de 2029 ('+sellados.length+' mensajes)</summary><div class="msgs" style="margin-top:12px">'+sellados.map(m=>'<div class="msg"><p>'+e(m.texto)+'</p><small>'+e(m.nombre)+'</small></div>').join("")+'</div></details>';
+  h+='</main><footer>Gracias por acompañarme en mis XV años</footer></body></html>';
+  return h;
+}
 $("dlAll").addEventListener("click",async()=>{
   if(!window.JSZip){$("dlNote").textContent="La descarga no está disponible. Recarga la página.";return;}
-  const list=screenList();if(!list.length)return;
+  const list=screenList().slice().sort((a,b)=>String(a.created_at).localeCompare(String(b.created_at)));if(!list.length)return;
   const b=$("dlAll");b.disabled=true;
   try{
-    const z=new JSZip();const fo=z.folder("Fotos"),vi=z.folder("Videos");let ok=0;
+    const z=new JSZip();const items=[];
     for(let i=0;i<list.length;i++){
       $("dlNote").textContent="Juntando "+(i+1)+" de "+list.length+"…";
-      try{const blob=await getBlob(list[i]);(list[i].tipo==="video"?vi:fo).file(fname(list[i],i),blob);ok++;}catch(_){}
+      try{const blob=await getBlob(list[i]);const f="Fotos/"+fname(list[i],i);z.file(f,blob);items.push({p:list[i],f});}catch(_){}
     }
     const opened=new Date()>=OPEN_DATE;
     const visibles=messages.filter(m=>m.texto&&(!m.sellado||opened||editor));
-    if(visibles.length){
-      const abiertos=visibles.filter(m=>!m.sellado),sellados=visibles.filter(m=>m.sellado);
-      if(abiertos.length)z.file("Mensajes para Laura.txt",abiertos.map(m=>m.nombre+":\n"+m.texto).join("\n\n"));
-      if(sellados.length)z.file("Capsula del tiempo - abrir el 11-11-2029.txt",sellados.map(m=>m.nombre+":\n"+m.texto).join("\n\n"));
-    }
+    const abiertos=visibles.filter(m=>!m.sellado).reverse(),sellados=visibles.filter(m=>m.sellado).reverse();
+    if(abiertos.length)z.file("Mensajes para Laura.txt",abiertos.map(m=>m.nombre+":\n"+m.texto).join("\n\n"));
+    if(sellados.length)z.file("Capsula del tiempo - abrir el 11-11-2029.txt",sellados.map(m=>m.nombre+":\n"+m.texto).join("\n\n"));
+    z.file("Abrir album.html",offlineHTML(items,abiertos,sellados));
     $("dlNote").textContent="Armando el archivo…";
     const data=await z.generateAsync({type:"blob",compression:"STORE"});
     saveBlob(data,"XV Laura Michelle - album.zip");
-    $("dlNote").textContent="Listo: "+ok+" archivos en el álbum.";
+    $("dlNote").textContent="Listo: "+items.length+" fotos. Descomprime el archivo y abre «Abrir album.html» para verlo sin internet.";
   }catch(_){$("dlNote").textContent="No se pudo armar el álbum. Inténtalo otra vez.";}
   finally{b.disabled=false;}
+});
+
+/* ---------- Sesión de fotos (organizador) ---------- */
+$("sesFiles").addEventListener("change",async()=>{
+  const fs=[...$("sesFiles").files];if(!fs.length||!editor)return;
+  let ok=0;
+  for(let i=0;i<fs.length;i++){
+    $("sesNote").textContent="Subiendo "+(i+1)+" de "+fs.length+"…";
+    try{
+      const full=await shrink(fs[i],2048,0.9),mini=await shrink(full,480,0.8);
+      const base=Date.now()+"-"+Math.random().toString(36).slice(2,8);
+      const path="fotos/sesion-"+base+".jpg",tp="mini/sesion-"+base+".jpg";
+      const u1=await sb.storage.from("album").upload(path,full,{contentType:"image/jpeg"});if(u1.error)throw u1.error;
+      const u2=await sb.storage.from("album").upload(tp,mini,{contentType:"image/jpeg"});
+      const r=await sb.rpc("admin_agregar",{p_clave:clave,p_path:path,p_thumb:u2.error?null:tp});if(r.error)throw r.error;
+      ok++;
+    }catch(_){}
+  }
+  $("sesNote").textContent="Listo: "+ok+" de "+fs.length+" fotos subidas.";$("sesFiles").value="";refresh();
 });
 
 /* ---------- Organizador ---------- */
