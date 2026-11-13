@@ -206,6 +206,17 @@ body.is-admin .admin-nav{display:inline-block!important}
 .showqr{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:12px;font-weight:700}
 .showqr > div{background:#fff;padding:6px;border-radius:10px}
 .showqr img,.showqr canvas{display:block;width:110px;height:110px}
+.ph .acts button.like{background:var(--rose-soft);color:var(--rose-deep)}
+.ph .acts button.like.on{background:var(--rose);color:#fff}
+.ph .acts button.star{background:#fff4d6;color:#8a6200}
+.ph .acts button.star.on{background:#f2c38b;color:#4a3300}
+.ph .stb{position:absolute;top:6px;left:6px;background:#f2c38b;color:#4a3300;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:2px 7px;border-radius:999px;pointer-events:none}
+.sortrow{display:flex;gap:6px;justify-content:center;margin:0 0 10px}
+.sortrow button{border:0;border-radius:999px;padding:7px 16px;font-weight:700;font-size:13px;cursor:pointer;background:var(--paper);box-shadow:0 4px 12px -6px rgba(29,127,120,.35)}
+.sortrow button[aria-pressed=true]{background:var(--rose);color:#fff}
+.show select{background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);border-radius:999px;padding:9px 14px;width:auto}
+.show select option{color:#000}
+.check-note{font-size:13px;color:var(--aqua-deep);margin:0}
 @media (max-width:480px){
   .tl:before{left:90px}
   .tl li{grid-template-columns:78px 1fr;gap:26px}
@@ -267,7 +278,7 @@ body.is-admin .admin-nav{display:inline-block!important}
     <div class="head"><h2>Fotos y videos</h2><p class="lede">Sube tus fotos y videos desde el celular, sobre todo del vals. Aparecen al instante aquí y en la pantalla del salón, y quedan como álbum para descargar.</p></div>
 
     <form class="card" id="upForm">
-      <label class="pick" for="file"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-2.5h6L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.6"/></svg><span id="pickTxt">Toca para elegir una foto o un video</span><span class="note">Videos de hasta 50 MB (más o menos 30 a 40 segundos)</span>
+      <label class="pick" for="file"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-2.5h6L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.6"/></svg><span id="pickTxt">Toca para elegir una foto o un video</span><span class="note">Videos de hasta 50 MB (más o menos 30 a 40 segundos). Cada foto y video se revisa antes de publicarse.</span>
         <input type="file" id="file" accept="image/*,video/*">
       </label>
       <div class="row">
@@ -282,6 +293,7 @@ body.is-admin .admin-nav{display:inline-block!important}
     </form>
 
     <div class="albumbar" id="albumBar" hidden><button class="btn rose" type="button" id="dlAll">Descargar álbum completo (.zip)</button><p class="note" id="dlNote"></p></div>
+    <div class="sortrow" role="group" aria-label="Ordenar"><button type="button" id="sortNew" aria-pressed="true">Recientes</button><button type="button" id="sortBest" aria-pressed="false">Las mejores</button></div>
     <div class="filters" id="filters" role="group" aria-label="Filtrar por momento"></div>
     <p class="note" id="loadNote"></p>
     <div class="grid" id="grid"></div>
@@ -340,6 +352,7 @@ body.is-admin .admin-nav{display:inline-block!important}
     <span class="nowline" id="showNow"></span>
     <div class="showqr"><div id="showQR"></div><span>Sube tus fotos</span></div>
     <div class="ctrls">
+      <select id="showMode" aria-label="Qué mostrar"><option value="todo">Mostrar todo</option><option value="mejores">Solo las mejores</option></select>
       <button class="btn close" id="prevShow" type="button">Anterior</button>
       <button class="btn close" id="pauseShow" type="button">Pausar</button>
       <button class="btn close" id="nextShow" type="button">Siguiente</button>
@@ -419,9 +432,15 @@ autoMomento();
 const savedName=store.get("xv_nombre");if(savedName){$("upName").value=savedName;$("msgName").value=savedName;}
 
 /* ---------- Estado ---------- */
+let sortBest=false,liked=new Set((store.get("xv_likes")||"").split(",").filter(Boolean));
 let photos=[],messages=[],loaded=false,filter="Todas",clave=store.get("xv_clave")||"",editor=false,known=null;
 function photoList(){return photos.filter(p=>editor||!p.oculta);}
-function screenList(){return photos.filter(p=>!p.oculta);}
+const isBest=p=>p.destacada||(p.likes||0)>=3;
+const score=p=>(p.destacada?1000:0)+(p.likes||0);
+function screenList(){
+  const l=photos.filter(p=>!p.oculta);
+  return ($("showMode")&&$("showMode").value==="mejores")?l.filter(isBest):l;
+}
 function matchF(p,f){return f==="Todas"||(f==="Videos"?p.tipo==="video":p.momento===f);}
 function renderFilters(){
   const list=photoList();
@@ -437,14 +456,17 @@ function tile(p,i){
   const tape=i%3===0?'<span class="tape" aria-hidden="true"></span>':'';
   const media=isV?'<video src="'+esc(p.url)+'#t=0.1" controls playsinline preload="metadata"></video><span class="vbadge">Video</span>'
                  :'<img loading="lazy" alt="Foto de '+esc(p.nombre||"un invitado")+' en '+esc(p.momento)+'" src="'+esc(p.url)+'">';
-  const b=['<button type="button" data-dl="'+esc(p.id)+'">Descargar</button>'];
-  if(editor) b.push('<button type="button" class="hide" data-hide="'+esc(p.id)+'">'+(p.oculta?"Mostrar":"Ocultar")+'</button>');
-  return '<div class="ph'+(p.oculta?" off":"")+'" data-id="'+esc(p.id)+'" style="--r:'+r+'deg">'+tape+'<div class="im">'+media+'</div>'+cap+'<div class="acts">'+b.join("")+'</div></div>';
+  const lk=liked.has(p.id);
+  const b=['<button type="button" class="like'+(lk?" on":"")+'" data-like="'+esc(p.id)+'" aria-label="Me encanta">♥ '+(p.likes||0)+'</button>','<button type="button" data-dl="'+esc(p.id)+'">Descargar</button>'];
+  if(editor){b.push('<button type="button" class="star'+(p.destacada?" on":"")+'" data-star="'+esc(p.id)+'">'+(p.destacada?"★ Destacada":"☆ Destacar")+'</button>');
+    b.push('<button type="button" class="hide" data-hide="'+esc(p.id)+'">'+(p.oculta?"Mostrar":"Ocultar")+'</button>');}
+  return '<div class="ph'+(p.oculta?" off":"")+'" data-id="'+esc(p.id)+'" style="--r:'+r+'deg">'+tape+'<div class="im">'+media+(p.destacada?'<span class="stb">★ Mejor</span>':'')+'</div>'+cap+'<div class="acts">'+b.join("")+'</div></div>';
 }
 let lastSig="";
 function renderPhotos(force){
-  const list=photoList().filter(p=>matchF(p,filter));
-  const sig=filter+"|"+editor+"|"+list.map(p=>p.id+(p.oculta?"o":"")).join(",");
+  let list=photoList().filter(p=>matchF(p,filter));
+  if(sortBest)list=list.slice().sort((a,b)=>score(b)-score(a));
+  const sig=filter+"|"+editor+"|"+sortBest+"|"+list.map(p=>p.id+(p.oculta?"o":"")+(p.destacada?"d":"")+(p.likes||0)+(liked.has(p.id)?"l":"")).join(",");
   renderFilters();renderRetos();
   $("albumBar").hidden=!screenList().length;
   if(!force&&sig===lastSig)return; // no redibujar si nada cambió (no corta videos en reproducción)
@@ -500,6 +522,65 @@ let pollT=null;
 function schedule(){clearTimeout(pollT);pollT=setTimeout(async()=>{if(!document.hidden)await refresh();schedule();},showOpen?4000:12000);}
 document.addEventListener("visibilitychange",()=>{if(!document.hidden){refresh();}});
 
+/* ---------- Moderación ---------- */
+const BAD=new RegExp("(^|[^a-z])(hijueputa|ijueputa|hijuepta|hp|hpta|hijodeputa|gonorea|malparid[oa]s?|maricas?|maricon|puta|putas|puto|putos|putica|mierda|verga|vergas|culo|culos|culiar|culear|culi[oa]|pendej[oa]s?|idiota|estupid[oa]s?|imbecil|pera|peras|zora|zoras|carajo|mamad[ao]|mamar|mamon|pene|vagina|sexo|porno|teta|tetas|folar|pola|polas|cabron|maldit[oa]s?|lambon|guev[oa]n|webon|huev[oa]s|nalgas?|desnud[oa]s?|cachond[oa]|pichar|chichar|marihuana|fuck|shit|bitch|dick|pussy|nude|nudes)([^a-z]|$)");
+function norm(t){
+  const from="áéíóúüñ0134578@$!|",to="aeiouunoieastbasii";
+  return String(t||"").toLowerCase().split("").map(c=>{const i=from.indexOf(c);return i>=0?to[i]:c;}).join("").replace(/(.)\1+/g,"$1");
+}
+const hasBad=t=>BAD.test(norm(t));
+const BAD_MSG="Ese texto tiene palabras que no se permiten en esta página. Cámbialo, por favor.";
+const isBadErr=err=>/GROSERIA/.test(String((err&&(err.message||err.details||err.hint))||""));
+let nsfwP=null;
+function addScript(src){return new Promise((ok,ko)=>{const s=document.createElement("script");s.src=src;s.onload=ok;s.onerror=ko;document.head.appendChild(s);});}
+function loadNSFW(){
+  if(!nsfwP){
+    nsfwP=(async()=>{
+      await addScript("vendor/nsfwjs.min.js");
+      await addScript("vendor/nsfw-model.min.js");
+      await addScript("vendor/nsfw-shard.min.js");
+      return await window.nsfwjs.load("MobileNetV2");
+    })();
+    nsfwP.catch(()=>{nsfwP=null;});
+  }
+  return nsfwP;
+}
+["pointerdown","focusin"].forEach(ev=>$("upForm").addEventListener(ev,()=>{loadNSFW().catch(()=>{});},{once:true}));
+function verdict(preds,isPhoto){
+  const g=n=>(preds.find(p=>p.className===n)||{}).probability||0;
+  if(g("Porn")+g("Hentai")>=0.45||g("Sexy")>=0.6) return "sexual";
+  if(isPhoto&&g("Drawing")>=0.9) return "dibujo";
+  return "";
+}
+function withTimeout(p,ms){return Promise.race([p,new Promise((_,ko)=>setTimeout(()=>ko(new Error("timeout")),ms))]);}
+async function checkImage(blob){
+  const m=await withTimeout(loadNSFW(),30000);
+  const url=URL.createObjectURL(blob);
+  try{
+    const img=await new Promise((ok,ko)=>{const i=new Image();i.onload=()=>ok(i);i.onerror=ko;i.src=url;});
+    return verdict(await m.classify(img),true);
+  }finally{URL.revokeObjectURL(url);}
+}
+async function checkVideo(file){
+  const m=await withTimeout(loadNSFW(),30000);
+  const url=URL.createObjectURL(file);
+  const v=document.createElement("video");v.muted=true;v.playsInline=true;v.preload="auto";v.src=url;
+  try{
+    await withTimeout(new Promise((ok,ko)=>{v.onloadeddata=ok;v.onerror=ko;}),15000);
+    const d=isFinite(v.duration)&&v.duration>0?v.duration:1;
+    const c=document.createElement("canvas");const W=320;
+    for(const f of [0.1,0.35,0.6,0.85]){
+      v.currentTime=Math.min(d-0.05,d*f);
+      await withTimeout(new Promise(ok=>{v.onseeked=ok;}),8000);
+      c.width=W;c.height=Math.round(W*(v.videoHeight||240)/(v.videoWidth||320));
+      c.getContext("2d").drawImage(v,0,0,c.width,c.height);
+      const r=verdict(await m.classify(c),false);
+      if(r)return r;
+    }
+    return "";
+  }finally{URL.revokeObjectURL(url);v.removeAttribute("src");}
+}
+
 /* ---------- Subir ---------- */
 const fileIn=$("file");
 function shrink(file){
@@ -537,10 +618,17 @@ $("upForm").addEventListener("submit",async e=>{
   if(!isV&&!(f.type||"").startsWith("image")){note.textContent="Ese archivo no es una foto ni un video.";note.className="note err";return;}
   if(isV&&f.size>MAX_MB*1048576){note.textContent="El video pesa más de "+MAX_MB+" MB. Recórtalo en tu celular y súbelo otra vez.";note.className="note err";return;}
   if(!sb){note.textContent="No se pudo conectar. Recarga la página.";note.className="note err";return;}
-  const nombre=$("upName").value.trim().slice(0,40);if(nombre)store.set("xv_nombre",nombre);
-  $("upBtn").disabled=true;note.textContent=isV?"Subiendo el video, puede tardar un poco…":"Subiendo…";
+  const nombre=$("upName").value.trim().slice(0,40);
+  if(hasBad(nombre)){note.textContent=BAD_MSG;note.className="note err";return;}
+  if(nombre)store.set("xv_nombre",nombre);
+  $("upBtn").disabled=true;note.textContent=isV?"Revisando el video…":"Revisando la foto…";
   try{
     const blob=isV?f:await shrink(f);
+    let v="";
+    try{v=isV?await checkVideo(f):await checkImage(blob);}catch(_){v="";}
+    if(v==="sexual"){note.className="note err";note.textContent="Este contenido no se puede publicar en los XV de Laura. Elige otra foto o video.";fileIn.value="";$("pickTxt").textContent="Toca para elegir una foto o un video";return;}
+    if(v==="dibujo"){note.className="note err";note.textContent="Esto no parece una foto de la fiesta. Sube fotos o videos tomados en los XV.";fileIn.value="";$("pickTxt").textContent="Toca para elegir una foto o un video";return;}
+    note.textContent=isV?"Subiendo el video, puede tardar un poco…":"Subiendo…";
     const ct=isV?(f.type||"video/mp4"):"image/jpeg";
     const path=(isV?"videos/":"fotos/")+Date.now()+"-"+Math.random().toString(36).slice(2,8)+"."+extOf(f.type,isV);
     const up=await sb.storage.from("album").upload(path,blob,{contentType:ct,upsert:false});
@@ -553,7 +641,7 @@ $("upForm").addEventListener("submit",async e=>{
   }catch(err){
     const m=String((err&&(err.message||err.error))||"");
     note.className="note err";
-    note.textContent=/size|large|exceed|413/i.test(m)?"El archivo es muy pesado. El máximo es "+MAX_MB+" MB.":"No se pudo subir. Revisa tu conexión e inténtalo otra vez.";
+    note.textContent=isBadErr(err)?BAD_MSG:/size|large|exceed|413/i.test(m)?"El archivo es muy pesado. El máximo es "+MAX_MB+" MB.":"No se pudo subir. Revisa tu conexión e inténtalo otra vez.";
   }finally{$("upBtn").disabled=false;}
 });
 
@@ -563,6 +651,7 @@ $("msgForm").addEventListener("submit",async e=>{
   const note=$("msgNote");note.className="note";
   const nombre=$("msgName").value.trim().slice(0,40),texto=$("msgText").value.trim().slice(0,600);
   if(!nombre||!texto){note.textContent="Escribe tu nombre y tu mensaje.";note.className="note err";return;}
+  if(hasBad(nombre)||hasBad(texto)){note.textContent=BAD_MSG;note.className="note err";return;}
   if(!sb){note.textContent="No se pudo conectar. Recarga la página.";note.className="note err";return;}
   store.set("xv_nombre",nombre);
   $("msgBtn").disabled=true;
@@ -572,7 +661,7 @@ $("msgForm").addEventListener("submit",async e=>{
     if(r.error)throw r.error;
     note.textContent=sealed?"Tu mensaje quedó sellado hasta 2029.":"¡Gracias! Tu mensaje ya está publicado.";
     $("msgText").value="";$("msgSeal").checked=false;loadMsgs().catch(()=>{});
-  }catch(_){note.className="note err";note.textContent="No se pudo enviar. Inténtalo otra vez.";}
+  }catch(err){note.className="note err";note.textContent=isBadErr(err)?BAD_MSG:"No se pudo enviar. Inténtalo otra vez.";}
   finally{$("msgBtn").disabled=false;}
 });
 
@@ -588,7 +677,26 @@ function saveBlob(blob,name){
   setTimeout(()=>URL.revokeObjectURL(url),60000);
 }
 async function getBlob(p){const r=await fetch(p.url);if(!r.ok)throw new Error("fetch");return r.blob();}
+$("sortNew").addEventListener("click",()=>{sortBest=false;$("sortNew").setAttribute("aria-pressed","true");$("sortBest").setAttribute("aria-pressed","false");renderPhotos(true);});
+$("sortBest").addEventListener("click",()=>{sortBest=true;$("sortBest").setAttribute("aria-pressed","true");$("sortNew").setAttribute("aria-pressed","false");renderPhotos(true);});
+$("showMode").addEventListener("change",()=>{pos=-1;queue=[];goNext();});
 $("grid").addEventListener("click",async e=>{
+  const l=e.target.closest("button[data-like]");
+  if(l){
+    const id=l.dataset.like;if(liked.has(id))return;
+    liked.add(id);store.set("xv_likes",[...liked].join(","));
+    const p=photos.find(x=>x.id===id);if(p)p.likes=(p.likes||0)+1;renderPhotos(true);
+    sb&&sb.rpc("dar_like",{p_id:id}).then(()=>{}, ()=>{});
+    return;
+  }
+  const st=e.target.closest("button[data-star]");
+  if(st&&editor){
+    const p=photos.find(x=>x.id===st.dataset.star);if(!p)return;
+    st.disabled=true;
+    const r=await sb.rpc("admin_destacar",{p_clave:clave,p_id:p.id,p_destacada:!p.destacada});
+    if(!r.error){p.destacada=!p.destacada;renderPhotos(true);}else st.disabled=false;
+    return;
+  }
   const h=e.target.closest("button[data-hide]");
   if(h&&editor){
     const p=photos.find(x=>x.id===h.dataset.hide);if(!p)return;
