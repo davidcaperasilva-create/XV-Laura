@@ -327,7 +327,7 @@ body.is-admin .admin-nav{display:inline-block!important}
         <input type="file" id="file" accept="image/*">
       </label>
       <div class="row">
-        <label class="f" for="upName">Tu nombre<input type="text" id="upName" maxlength="40" placeholder="Ej: Tía Marta"></label>
+        <label class="f" for="upName">Pon tu nombre<input type="text" id="upName" maxlength="40" placeholder="Pon tu nombre"></label>
         <div class="f">Momento de la fiesta<div class="momchip" id="momNow">Llegada</div><select id="upMom" hidden aria-hidden="true" tabindex="-1"></select></div>
         <label class="f" for="upReto">Reto (opcional)<select id="upReto"><option value="">Ninguno</option></select></label>
       </div>
@@ -352,7 +352,7 @@ body.is-admin .admin-nav{display:inline-block!important}
   <section id="mensajes" class="tint"><div class="wrap">
     <div class="head"><h2>Mensajes para Laura</h2><p class="lede">Déjale un deseo. Si marcas la cápsula del tiempo, tu mensaje queda sellado y se abre cuando cumpla 18 años.</p></div>
     <form class="card" id="msgForm">
-      <label class="f" for="msgName">Tu nombre<input type="text" id="msgName" maxlength="40" placeholder="Ej: Tu prima Valentina"></label>
+      <label class="f" for="msgName">Pon tu nombre<input type="text" id="msgName" maxlength="40" placeholder="Pon tu nombre"></label>
       <label class="f" for="msgText">Tu mensaje<textarea id="msgText" maxlength="600" placeholder="Laura, te deseo…"></textarea></label>
       <label class="check" for="msgSeal"><input type="checkbox" id="msgSeal"> Guardarlo en la cápsula del tiempo (se abre el 11 de noviembre de 2029)</label>
       <div class="row" style="align-items:center">
@@ -708,7 +708,7 @@ $("upForm").addEventListener("submit",async e=>{
   e.preventDefault();
   const note=$("upNote");note.className="note";
   const f=pendingFile||fileIn.files[0];
-  if(!f){note.textContent="Primero elige una foto o un video.";note.className="note err";return;}
+  if(!f){note.textContent="Primero toma o elige una foto.";note.className="note err";return;}
   const isV=false;
   if(!(f.type||"").startsWith("image")&&!/\.(jpe?g|png|webp|heic|heif)$/i.test(f.name||"")){note.textContent="Aquí solo se suben fotos. Elige una foto, por favor.";note.className="note err";return;}
   if(isV&&f.size>MAX_MB*1048576){note.textContent="El video pesa más de "+MAX_MB+" MB. Recórtalo a "+MAX_SEG+" segundos o menos y súbelo otra vez.";note.className="note err";return;}
