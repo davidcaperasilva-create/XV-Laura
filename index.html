@@ -217,6 +217,7 @@ body.is-admin .admin-nav{display:inline-block!important}
 .show select{background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);border-radius:999px;padding:9px 14px;width:auto}
 .show select option{color:#000}
 .check-note{font-size:13px;color:var(--aqua-deep);margin:0}
+.momchip{border-radius:16px;padding:10px 14px;background:var(--aqua-soft);color:var(--aqua-deep);font-weight:700}
 @media (max-width:480px){
   .tl:before{left:90px}
   .tl li{grid-template-columns:78px 1fr;gap:26px}
@@ -283,7 +284,7 @@ body.is-admin .admin-nav{display:inline-block!important}
       </label>
       <div class="row">
         <label class="f" for="upName">Tu nombre<input type="text" id="upName" maxlength="40" placeholder="Ej: Tía Marta"></label>
-        <label class="f" for="upMom">Momento<select id="upMom"></select></label>
+        <div class="f">Momento de la fiesta<div class="momchip" id="momNow">Llegada</div><select id="upMom" hidden aria-hidden="true" tabindex="-1"></select></div>
         <label class="f" for="upReto">Reto (opcional)<select id="upReto"><option value="">Ninguno</option></select></label>
       </div>
       <div class="row" style="align-items:center">
@@ -421,14 +422,18 @@ function renderItin(){
   $("showNow").textContent=idx>=0?"Ahora: "+ITIN[idx].t:"Mis XV";
 }
 simSel.addEventListener("change",renderItin);
-renderItin();setInterval(renderItin,30000);
+renderItin();setInterval(()=>{renderItin();if(window.__am)window.__am();},30000);
 
 /* ---------- Selects ---------- */
 MOMENTOS.forEach(m=>{const o=document.createElement("option");o.textContent=m;$("upMom").appendChild(o);});
 RETOS.forEach(r=>{const o=document.createElement("option");o.textContent=r;$("upReto").appendChild(o);});
 const MOM_MAP=["Llegada","Llegada","Entrada","Zapatilla","Vals","Brindis","Última muñeca","Canción","15 deseos","Cena","Sorpresas","Sorpresas","Cena","Baile","Hora loca","Torta","Despedida"];
-function autoMomento(){const idx=currentIdx(partyMins());if(idx>=0)$("upMom").value=MOM_MAP[idx]||"Baile";}
-autoMomento();
+function autoMomento(){
+  const mins=partyMins(),idx=currentIdx(mins);
+  const m=idx>=0?(MOM_MAP[idx]||"Baile"):(mins>0?"Despedida":"Llegada");
+  $("upMom").value=m;$("momNow").textContent=m;
+}
+autoMomento();window.__am=autoMomento;simSel.addEventListener("change",autoMomento);
 const savedName=store.get("xv_nombre");if(savedName){$("upName").value=savedName;$("msgName").value=savedName;}
 
 /* ---------- Estado ---------- */
@@ -600,7 +605,6 @@ fileIn.addEventListener("change",()=>{
   const f=fileIn.files[0];$("upNote").textContent="";$("upNote").className="note";
   $("pickTxt").textContent=f?((f.type.startsWith("video")?"Video listo: ":"Foto lista: ")+f.name):"Toca para elegir una foto o un video";
   if(f&&f.type.startsWith("video")){
-    if(currentIdx(partyMins())<0||$("upMom").value==="Llegada")$("upMom").value="Vals";
     if(f.size>MAX_MB*1048576){$("upNote").textContent="Este video pesa "+Math.round(f.size/1048576)+" MB. El máximo es "+MAX_MB+" MB: recórtalo en tu celular y elígelo otra vez.";$("upNote").className="note err";}
   }
 });
@@ -621,6 +625,7 @@ $("upForm").addEventListener("submit",async e=>{
   const nombre=$("upName").value.trim().slice(0,40);
   if(hasBad(nombre)){note.textContent=BAD_MSG;note.className="note err";return;}
   if(nombre)store.set("xv_nombre",nombre);
+  autoMomento();
   $("upBtn").disabled=true;note.textContent=isV?"Revisando el video…":"Revisando la foto…";
   try{
     const blob=isV?f:await shrink(f);
