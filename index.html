@@ -249,6 +249,19 @@ body.is-admin .admin-nav{display:inline-block!important}
 .vm{max-width:380px;text-align:center}
 .vm-t{font-family:var(--f-display);font-size:46px;color:var(--rose-deep);line-height:1}
 .vm p{margin:0;color:var(--ink)}
+.countdown{margin:22px auto 0;max-width:420px}
+.cd-k{font-family:var(--f-accent);font-style:italic;font-size:20px;color:var(--rose-deep)}
+.cd-row{display:flex;justify-content:center;gap:10px;margin-top:8px}
+.cd-row div{background:rgba(255,255,255,.85);border-radius:20px 14px 22px 12px;padding:10px 6px;min-width:66px;box-shadow:var(--soft-shadow)}
+.cd-row b{display:block;font-size:30px;font-weight:700;color:var(--aqua-deep);font-variant-numeric:tabular-nums;line-height:1.1}
+.cd-row span{font-size:12px;color:var(--muted)}
+.cd-note{font-size:13px;color:var(--muted);margin-top:10px}
+.countdown.open .cd-row{display:none}
+.countdown.open .cd-k{font-family:var(--f-display);font-style:normal;font-size:40px;color:var(--aqua-deep)}
+.lockcard{display:none;background:var(--paper);border-radius:30px 22px 34px 24px;padding:20px;text-align:center;box-shadow:var(--soft-shadow);margin-bottom:22px;color:var(--ink)}
+body.locked .lockcard{display:block}
+body.locked [data-lockable]{display:none}
+body.locked .ph .acts button.like,body.locked .reto .btns{display:none}
 @media (max-width:480px){
   .tl:before{left:90px}
   .tl li{grid-template-columns:78px 1fr;gap:26px}
@@ -275,6 +288,16 @@ body.is-admin .admin-nav{display:inline-block!important}
       <span class="chip">8:00 p. m.</span>
       <span class="chip">Sábado 14 de noviembre de 2026</span>
       <span class="chip">Marañón</span>
+    </div>
+    <div class="countdown" id="countdown" aria-live="polite">
+      <div class="cd-k" id="cdK">La fiesta empieza en</div>
+      <div class="cd-row" id="cdRow">
+        <div><b id="cdD">0</b><span>días</span></div>
+        <div><b id="cdH">00</b><span>horas</span></div>
+        <div><b id="cdM">00</b><span>min</span></div>
+        <div><b id="cdS">00</b><span>seg</span></div>
+      </div>
+      <div class="cd-note" id="cdNote">A las 8:00 p. m. se abre el álbum para subir fotos, votar y dejar mensajes.</div>
     </div>
     <svg class="ornament b" viewBox="0 0 200 40" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><path d="M10 26 C50 26 70 14 100 14 C130 14 150 26 190 26"/><path d="M100 14 C96 6 90 4 84 6 C88 12 94 14 100 14 Z" fill="currentColor" opacity=".35"/><path d="M100 14 C104 6 110 4 116 6 C112 12 106 14 100 14 Z" fill="currentColor" opacity=".35"/><path d="M60 21 C56 13 48 12 43 15 C48 20 54 22 60 21 Z" fill="currentColor" opacity=".25"/><path d="M140 21 C144 13 152 12 157 15 C152 20 146 22 140 21 Z" fill="currentColor" opacity=".25"/><circle cx="100" cy="17" r="2.6" fill="currentColor"/><circle cx="30" cy="26" r="1.6" fill="currentColor"/><circle cx="170" cy="26" r="1.6" fill="currentColor"/></svg>
   </div>
@@ -322,7 +345,8 @@ body.is-admin .admin-nav{display:inline-block!important}
   <section id="fotos" class="tint"><div class="wrap">
     <div class="head"><h2>Fotos de la noche</h2><p class="lede">Sube tus fotos desde el celular. Aparecen al instante aquí y en la pantalla del salón, y quedan como álbum para descargar.</p></div>
 
-    <form class="card" id="upForm">
+    <div class="lockcard" data-lock>🔒 El álbum se abre a las <b>8:00 p. m.</b> Vuelve cuando termine el conteo para subir tus fotos.</div>
+    <form class="card" id="upForm" data-lockable>
       <label class="pick" for="file"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-2.5h6L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.6"/></svg><span id="pickTxt">Toca para tomar o elegir una foto</span><span class="note">Cada foto se revisa antes de publicarse.</span>
         <input type="file" id="file" accept="image/*">
       </label>
@@ -351,7 +375,8 @@ body.is-admin .admin-nav{display:inline-block!important}
 
   <section id="mensajes" class="tint"><div class="wrap">
     <div class="head"><h2>Mensajes para Laura</h2><p class="lede">Déjale un deseo. Si marcas la cápsula del tiempo, tu mensaje queda sellado y se abre cuando cumpla 18 años.</p></div>
-    <form class="card" id="msgForm">
+    <div class="lockcard" data-lock>🔒 Los mensajes se abren a las <b>8:00 p. m.</b></div>
+    <form class="card" id="msgForm" data-lockable>
       <label class="f" for="msgName">Pon tu nombre<input type="text" id="msgName" maxlength="40" placeholder="Pon tu nombre"></label>
       <label class="f" for="msgText">Tu mensaje<textarea id="msgText" maxlength="600" placeholder="Laura, te deseo…"></textarea></label>
       <label class="check" for="msgSeal"><input type="checkbox" id="msgSeal"> Guardarlo en la cápsula del tiempo (se abre el 11 de noviembre de 2029)</label>
@@ -925,6 +950,29 @@ $("sesFiles").addEventListener("change",async()=>{
   }
   $("sesNote").textContent="Listo: "+ok+" de "+fs.length+" fotos subidas.";$("sesFiles").value="";refresh();
 });
+
+/* ---------- Cuenta regresiva: se abre a las 8:00 p. m. ---------- */
+const OPEN_AT=Date.UTC(2026,10,15,1,0,0); // 14 nov 2026, 8:00 p. m. Colombia
+let wasLocked=null;
+const pad2=n=>String(n).padStart(2,"0");
+function tickCountdown(){
+  const ms=OPEN_AT-Date.now(),locked=ms>0&&!editor;
+  if(ms>0){
+    const t=Math.floor(ms/1000);
+    $("cdD").textContent=Math.floor(t/86400);$("cdH").textContent=pad2(Math.floor(t%86400/3600));
+    $("cdM").textContent=pad2(Math.floor(t%3600/60));$("cdS").textContent=pad2(t%60);
+    $("cdD").parentElement.hidden=t<86400;
+  }else{
+    $("countdown").classList.add("open");$("cdK").textContent="¡Llegó la fiesta!";
+    $("cdNote").textContent="Ya puedes subir tus fotos, votar en los retos y dejarle un mensaje a Laura.";
+  }
+  if(editor&&ms>0)$("cdNote").textContent="Modo organizador: tú ya puedes usar todo. Los invitados podrán a las 8:00 p. m.";
+  document.body.classList.toggle("locked",locked);
+  if(wasLocked===true&&!locked){toast("¡Llegó la hora! Ya puedes subir tus fotos 🎉");renderPhotos(true);}
+  if(wasLocked!==locked)renderRetos();
+  wasLocked=locked;
+}
+tickCountdown();setInterval(tickCountdown,1000);
 
 /* ---------- Organizador ---------- */
 function setEditor(on){
