@@ -262,6 +262,12 @@ body.is-admin .admin-nav{display:inline-block!important}
 body.locked .lockcard{display:block}
 body.locked [data-lockable]{display:none}
 body.locked .ph .acts button.like,body.locked .reto .btns{display:none}
+.remote{position:fixed;left:50%;bottom:12px;transform:translateX(-50%);z-index:9;display:flex;gap:6px;align-items:center;background:var(--ink);color:#fff;padding:8px 10px;border-radius:999px;box-shadow:0 10px 30px rgba(0,0,0,.3);max-width:calc(100vw - 20px)}
+.remote .rl{font-size:12px;font-weight:700;padding:0 4px;white-space:nowrap}
+.remote button{border:0;background:rgba(255,255,255,.15);color:#fff;border-radius:999px;min-width:44px;height:40px;padding:0 12px;font-weight:700;font-size:15px;cursor:pointer;white-space:nowrap}
+.remote button:active{background:var(--rose)}
+body.is-admin footer{padding-bottom:90px}
+.ph .acts button.proj{background:#e8e2ff;color:#4b3aa0}
 @media (max-width:480px){
   .tl:before{left:90px}
   .tl li{grid-template-columns:78px 1fr;gap:26px}
@@ -416,6 +422,14 @@ body.locked .ph .acts button.like,body.locked .reto .btns{display:none}
     <button class="btn ghost" type="button" id="adminOut" hidden>Salir del modo organizador</button>
   </details>
 </footer>
+<div class="remote" id="remote" hidden role="group" aria-label="Control de la pantalla del salón">
+  <span class="rl">📺 Pantalla</span>
+  <button type="button" data-rc="prev" aria-label="Anterior">‹</button>
+  <button type="button" data-rc="toggle">⏯</button>
+  <button type="button" data-rc="next" aria-label="Siguiente">›</button>
+  <button type="button" data-rc="mode" id="rcMode">Solo mejores</button>
+  <button type="button" data-rc="win">🏆</button>
+</div>
 <div class="toast" id="toast" hidden></div>
 </div>
 
@@ -547,7 +561,8 @@ function tile(p,i){
   const b=['<button type="button" class="like'+(lk?" on":"")+'" data-like="'+esc(p.id)+'" aria-label="Me encanta">♥ '+(p.likes||0)+'</button>','<button type="button" data-dl="'+esc(p.id)+'">Descargar</button>'];
   if(editor){b.push('<button type="button" class="star'+(p.destacada?" on":"")+'" data-star="'+esc(p.id)+'">'+(p.destacada?"★ Destacada":"☆ Destacar")+'</button>');
     b.push('<button type="button" class="hide" data-hide="'+esc(p.id)+'">'+(p.oculta?"Mostrar":"Ocultar")+'</button>');
-    b.push('<button type="button" class="del" data-del="'+esc(p.id)+'">Borrar</button>');}
+    b.push('<button type="button" class="del" data-del="'+esc(p.id)+'">Borrar</button>');
+    b.push('<button type="button" class="proj" data-proj="'+esc(p.id)+'">📺 Proyectar</button>');}
   return '<div class="ph'+(p.oculta?" off":"")+'" data-id="'+esc(p.id)+'" style="--r:'+r+'deg">'+tape+'<div class="im">'+media+(p.destacada?'<span class="stb">★ Mejor</span>':'')+'</div>'+cap+'<div class="acts">'+b.join("")+'</div></div>';
 }
 let lastSig="";
@@ -847,6 +862,8 @@ $("sortNew").addEventListener("click",()=>{sortBest=false;$("sortNew").setAttrib
 $("sortBest").addEventListener("click",()=>{sortBest=true;$("sortBest").setAttribute("aria-pressed","true");$("sortNew").setAttribute("aria-pressed","false");renderPhotos(true);});
 $("showMode").addEventListener("change",()=>{pos=-1;queue=[];goNext();});
 $("grid").addEventListener("click",async e=>{
+  const pj=e.target.closest("button[data-proj]");
+  if(pj&&editor){sendRC("show",pj.dataset.proj);return;}
   const dl=e.target.closest("button[data-del]");
   if(dl&&editor){
     const id=dl.dataset.del;
@@ -974,9 +991,48 @@ function tickCountdown(){
 }
 tickCountdown();setInterval(tickCountdown,1000);
 
+/* ---------- Control remoto de la pantalla (celular del organizador → PC) ---------- */
+let rcMode="todo";
+async function sendRC(cmd,arg){
+  if(!editor||!sb)return;
+  const r=await sb.rpc("admin_control",{p_clave:clave,p_cmd:cmd,p_arg:arg==null?null:String(arg)});
+  toast(r.error?"No se pudo enviar. Revisa la conexión.":"Enviado a la pantalla ✓");
+}
+$("remote").addEventListener("click",e=>{
+  const b=e.target.closest("button[data-rc]");if(!b)return;
+  const c=b.dataset.rc;
+  if(c==="mode"){rcMode=rcMode==="todo"?"mejores":"todo";$("rcMode").textContent=rcMode==="todo"?"Solo mejores":"Mostrar todo";sendRC("mode",rcMode);return;}
+  sendRC(c,null);
+});
+let rcSeq=null,rcT=null;
+async function pollRC(){
+  if(!showOpen||!sb)return;
+  try{
+    const r=await sb.from("control").select("seq,cmd,arg").eq("id",1).single();
+    const d=r&&r.data;
+    if(d){
+      if(rcSeq===null)rcSeq=d.seq;
+      else if(d.seq>rcSeq){rcSeq=d.seq;applyRC(d.cmd,d.arg);}
+    }
+  }catch(_){}
+  rcT=setTimeout(pollRC,1500);
+}
+function applyRC(cmd,arg){
+  wake();
+  if(cmd==="next"){winMode=false;goNext();}
+  else if(cmd==="prev"){winMode=false;goPrev();}
+  else if(cmd==="toggle"){$("pauseShow").click();}
+  else if(cmd==="mode"&&(arg==="todo"||arg==="mejores")){$("showMode").value=arg;$("showMode").dispatchEvent(new Event("change"));}
+  else if(cmd==="win"){paused=false;$("pauseShow").textContent="Pausar";showWinners();}
+  else if(cmd==="show"){
+    const p=photos.find(x=>x.id===arg);
+    if(p){winMode=false;hist.push(p.id);display({p,fresh:true});}
+  }
+}
+
 /* ---------- Organizador ---------- */
 function setEditor(on){
-  editor=on;document.body.classList.toggle("is-admin",on);
+  editor=on;document.body.classList.toggle("is-admin",on);$("remote").hidden=!on;
   $("simRow").hidden=!on;$("adminState").textContent=on?"Modo organizador activo. Ves todo, puedes ocultar fotos y la cápsula del tiempo.":"";
   $("adminForm").hidden=on;$("adminOut").hidden=!on;
   if(on){drawQR();sb.rpc("album_bytes").then(r=>{if(r&&r.data!=null){const mb=Math.round(r.data/1048576);$("adminSpace").textContent="Espacio usado: "+mb+" MB de 900 MB"+(mb>700?" · ¡casi lleno!":"");}},()=>{});}
@@ -1079,7 +1135,7 @@ function onNewItems(items){
 }
 $("openShow").addEventListener("click",e=>{
   e.preventDefault();if(!editor)return;$("show").classList.add("open");showOpen=true;paused=false;$("pauseShow").textContent="Pausar";pos=-1;hist=[];queue=[];
-  drawShowQR();goNext();schedule();wake();
+  drawShowQR();goNext();schedule();wake();rcSeq=null;clearTimeout(rcT);pollRC();
   try{const r=document.documentElement.requestFullscreen&&document.documentElement.requestFullscreen();if(r&&r.catch)r.catch(()=>{});}catch(_){}
 });
 $("nextShow").addEventListener("click",()=>{winMode=false;goNext();});
@@ -1092,7 +1148,7 @@ $("pauseShow").addEventListener("click",()=>{
 });
 $("closeShow").addEventListener("click",()=>{
   winMode=false;
-  $("show").classList.remove("open");showOpen=false;clearShowTimer();$("stage").innerHTML="";schedule();
+  $("show").classList.remove("open");showOpen=false;clearShowTimer();clearTimeout(rcT);$("stage").innerHTML="";schedule();
   try{if(document.fullscreenElement)document.exitFullscreen().catch(()=>{});}catch(_){}
 });
 
