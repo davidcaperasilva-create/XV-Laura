@@ -413,6 +413,17 @@ body.is-admin footer{padding-bottom:90px}
       <p class="note">Código QR para las mesas. Toma captura e imprímelo.<br><span id="qrUrl"></span></p>
     </div>
     <div class="admin-only card" style="margin:14px 0;gap:8px">
+      <b>Ajustar el itinerario</b>
+      <p class="note" id="retrasoTxt">Sin retraso</p>
+      <div class="row" style="gap:6px">
+        <button class="btn ghost" type="button" data-ret="-15">−15 min</button>
+        <button class="btn ghost" type="button" data-ret="15">+15 min</button>
+        <button class="btn ghost" type="button" data-ret="30">+30 min</button>
+      </div>
+      <button class="btn rose" type="button" id="entradaYa">Laura está entrando AHORA</button>
+      <button class="btn ghost" type="button" data-ret="reset">Volver al horario original</button>
+    </div>
+    <div class="admin-only card" style="margin:14px 0;gap:8px">
       <b>Fotos de la sesión de fotos</b>
       <p class="note">Sube aquí las fotos profesionales de Laura. Quedan destacadas, en su propia sección, y salen en la pantalla del salón.</p>
       <label class="btn ghost" for="sesFiles" style="text-align:center">Elegir fotos de la sesión</label>
@@ -429,6 +440,7 @@ body.is-admin footer{padding-bottom:90px}
   <button type="button" data-rc="next" aria-label="Siguiente">›</button>
   <button type="button" data-rc="mode" id="rcMode">Solo mejores</button>
   <button type="button" data-rc="win">🏆</button>
+  <button type="button" id="rcItin" aria-label="Ajustar itinerario">⏱</button>
 </div>
 <div class="toast" id="toast" hidden></div>
 </div>
@@ -491,9 +503,16 @@ const pubUrl=path=>SB_URL+"/storage/v1/object/public/album/"+path.split("/").map
 /* ---------- Itinerario ---------- */
 const simSel=$("simSel");
 ITIN.forEach(it=>{const o=document.createElement("option");o.value=it.m+5;o.textContent=it.h+" · "+it.t;simSel.appendChild(o);});
+let retraso=0; // minutos que se corre el programa desde la entrada (lo pone el organizador)
+function realMins(){return Math.floor((Date.now()-Date.UTC(2026,10,15,1,0,0))/60000);}
 function partyMins(){
   if(simSel.value!=="") return Number(simSel.value);
-  return Math.floor((Date.now()-new Date(2026,10,14,20,0).getTime())/60000);
+  return realMins()-retraso;
+}
+function hOf(it){
+  if(it.m<60||!retraso)return it.h;
+  const t=(20*60+it.m+retraso)%(24*60),hh=Math.floor(t/60),mm=t%60,h12=hh%12||12;
+  return h12+":"+String(mm).padStart(2,"0")+(hh>=12?" p. m.":" a. m.");
 }
 function currentIdx(mins){
   if(mins<-60||mins>420) return -2;
@@ -504,12 +523,12 @@ function renderItin(){
   const mins=partyMins(),idx=currentIdx(mins);
   $("tl").innerHTML=ITIN.map((it,i)=>{
     const cls=[it.food?"food":"",it.sur?"surprise":"",idx>=0&&i<idx?"past":"",i===idx?"on":""].join(" ");
-    return '<li class="'+cls+'"><div class="hr">'+esc(it.h)+'</div><div><div class="ti">'+esc(it.t)+'</div>'+(it.d?'<div class="de">'+esc(it.d)+'</div>':'')+'</div></li>';
+    return '<li class="'+cls+'"><div class="hr">'+esc(hOf(it))+'</div><div><div class="ti">'+esc(it.t)+'</div>'+(it.d?'<div class="de">'+esc(it.d)+'</div>':'')+'</div></li>';
   }).join("");
   let nowT,nowH,nextT,nextH,k="Ahora";
-  if(idx===-2){k="La fiesta";const after=mins>420;nowT=after?"¡Gracias por venir!":"Sábado 14 de noviembre, 8:00 p. m.";nowH=after?"Revive la noche en las fotos":"Te esperamos en Marañón";nextT=ITIN[2].t;nextH=ITIN[2].h;}
-  else if(idx===-1){k="Muy pronto";nowT="Estamos por empezar";nowH="8:00 p. m.";nextT=ITIN[0].t;nextH=ITIN[0].h;}
-  else{nowT=ITIN[idx].t;nowH=ITIN[idx].h;const n=ITIN[idx+1];nextT=n?n.t:"Hasta la próxima";nextH=n?n.h:"";}
+  if(idx===-2){k="La fiesta";const after=mins>420;nowT=after?"¡Gracias por venir!":"Sábado 14 de noviembre, 8:00 p. m.";nowH=after?"Revive la noche en las fotos":"Te esperamos en Marañón";nextT=ITIN[2].t;nextH=hOf(ITIN[2]);}
+  else if(idx===-1){k="Muy pronto";nowT="Estamos por empezar";nowH="8:00 p. m.";nextT=ITIN[0].t;nextH=hOf(ITIN[0]);}
+  else{nowT=ITIN[idx].t;nowH=hOf(ITIN[idx]);const n=ITIN[idx+1];nextT=n?n.t:"Hasta la próxima";nextH=n?hOf(n):"";}
   $("nowK").textContent=k;$("nowT").textContent=nowT;$("nowH").textContent=nowH;$("nextT").textContent=nextT;$("nextH").textContent=nextH;
   $("showNow").textContent=idx>=0?"Ahora: "+ITIN[idx].t:"Mis XV";$("showNow").hidden=idx<0;
 }
@@ -620,7 +639,13 @@ async function loadMsgs(){
   if(r.error)throw r.error;
   messages=r.data||[];renderMsgs();
 }
+async function loadRetraso(){
+  if(!sb)return;
+  try{const r=await sb.from("control").select("retraso").eq("id",1).single();
+    if(r&&r.data&&typeof r.data.retraso==="number"&&r.data.retraso!==retraso){retraso=r.data.retraso;renderItin();autoMomento();if($("retrasoTxt"))$("retrasoTxt").textContent=retrasoLabel();}}catch(_){}
+}
 async function refresh(){
+  loadRetraso();
   try{await loadPhotos();await loadMsgs();}
   catch(_){if(!loaded)$("loadNote").textContent="No se pudo cargar el álbum. Revisa tu conexión; lo intentamos de nuevo solos.";}
 }
@@ -917,7 +942,7 @@ function offlineHTML(items,abiertos,sellados){
   const css='body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;color:#2c3b40;background:linear-gradient(160deg,#e3f5f3,#fff 45%,#fcecf0);background-attachment:fixed;line-height:1.55}main{max-width:1000px;margin:0 auto;padding:0 18px 60px}header{text-align:center;padding:48px 0 20px}h1{font-family:"Snell Roundhand","Apple Chancery",Georgia,serif;font-style:italic;font-weight:400;font-size:clamp(46px,10vw,80px);color:#1d7f78;margin:6px 0}h2{font-family:Georgia,serif;font-style:italic;font-weight:400;color:#1d7f78;font-size:34px;margin:40px 0 12px;text-align:center}h3{color:#b9566f;margin:26px 0 10px}.sub{color:#6b7d81;letter-spacing:.2em;text-transform:uppercase;font-size:12px}.meta{font-family:Georgia,serif;font-style:italic;font-size:20px}.tl{list-style:none;padding:0;max-width:560px;margin:0 auto}.tl li{display:grid;grid-template-columns:96px 1fr;gap:14px;padding:6px 0;border-bottom:1px dashed #cfe7e5}.tl b{color:#1d7f78;font-family:Georgia,serif;font-style:italic;font-weight:400;text-align:right}.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:16px}figure{margin:0;background:#fff;padding:8px 8px 6px;box-shadow:0 10px 24px -14px rgba(0,0,0,.4)}figure img{width:100%;aspect-ratio:1;object-fit:cover;display:block}figcaption{font-size:12px;color:#6b7d81;padding-top:6px;text-align:center}.msgs{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px}.msg{background:#fff;padding:16px;border-radius:6px 20px 6px 20px;box-shadow:0 10px 24px -16px rgba(0,0,0,.4)}.msg p{margin:0 0 6px;font-family:Georgia,serif;font-style:italic;font-size:18px;white-space:pre-wrap}.msg small{color:#6b7d81}.win{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px}.win .r{font-weight:700;color:#b9566f;text-align:center;margin-bottom:6px}details{background:#fff;border-radius:18px;padding:14px 18px;margin-top:14px}summary{cursor:pointer;font-weight:700;color:#b9566f}footer{text-align:center;color:#6b7d81;padding:30px 0;font-family:Georgia,serif;font-style:italic}';
   let h='<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Mis XV · Laura Michelle · Álbum</title><style>'+css+'</style></head><body><main>';
   h+='<header><div class="meta">Mis XV años</div><h1>Laura Michelle</h1><div class="sub">Capera Bustamante</div><p class="meta">Sábado 14 de noviembre de 2026 · Marañón</p><p class="sub">'+items.length+' fotos · '+abiertos.length+(abiertos.length===1?' mensaje':' mensajes')+'</p></header>';
-  h+='<h2>Itinerario</h2><ul class="tl">'+ITIN.map(it=>'<li><b>'+e(it.h)+'</b><span>'+e(it.t)+(it.d?'<br><small>'+e(it.d)+'</small>':'')+'</span></li>').join("")+'</ul>';
+  h+='<h2>Itinerario</h2><ul class="tl">'+ITIN.map(it=>'<li><b>'+e(hOf(it))+'</b><span>'+e(it.t)+(it.d?'<br><small>'+e(it.d)+'</small>':'')+'</span></li>').join("")+'</ul>';
   if(ganadores.length)h+='<h2>Ganadores de los retos</h2><div class="win">'+ganadores.map(g=>'<div><div class="r">🏆 '+e(g.r)+'</div>'+fig(g.w)+'</div>').join("")+'</div>';
   h+='<h2>Fotos de la noche</h2>'+orden.map(m=>'<h3>'+e(m)+'</h3><div class="grid">'+byMom[m].map(fig).join("")+'</div>').join("");
   if(abiertos.length)h+='<h2>Mensajes para Laura</h2><div class="msgs">'+abiertos.map(m=>'<div class="msg"><p>'+e(m.texto)+'</p><small>'+e(m.nombre)+'</small></div>').join("")+'</div>';
@@ -1029,6 +1054,22 @@ function applyRC(cmd,arg){
     if(p){winMode=false;hist.push(p.id);display({p,fresh:true});}
   }
 }
+
+/* ---------- Retraso del itinerario (organizador) ---------- */
+function retrasoLabel(){return retraso?("Programa corrido "+retraso+" min · Entrada a las "+hOf(ITIN[2])):"Sin retraso: horario original";}
+async function setRetraso(v){
+  if(!editor||!sb)return;
+  const r=await sb.rpc("admin_retraso",{p_clave:clave,p_min:Math.round(v)});
+  if(r.error){toast("No se pudo cambiar. Revisa la conexión.");return;}
+  retraso=r.data;renderItin();autoMomento();$("retrasoTxt").textContent=retrasoLabel();toast("Itinerario actualizado ✓");
+}
+document.addEventListener("click",e=>{
+  const b=e.target.closest("button[data-ret]");if(!b)return;
+  const v=b.dataset.ret;setRetraso(v==="reset"?0:retraso+Number(v));
+});
+$("entradaYa").addEventListener("click",()=>setRetraso(realMins()-60));
+$("rcItin").addEventListener("click",()=>{const d=document.querySelector("details.admin");if(d){d.open=true;$("retrasoTxt").scrollIntoView({behavior:"smooth",block:"center"});}});
+$("retrasoTxt").textContent=retrasoLabel();
 
 /* ---------- Organizador ---------- */
 function setEditor(on){
