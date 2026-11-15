@@ -293,6 +293,12 @@ body.is-admin footer{padding-bottom:90px}
 .show .rank h3{font-size:clamp(30px,4vw,48px)!important}
 .show .rnav{grid-column:1/-1;text-align:center;font-size:15px;opacity:.8;white-space:pre}
 .show .r1 .nm{font-size:24px;font-weight:800;margin-top:10px}
+.votebar{position:sticky;top:0;z-index:8;background:var(--rose-deep);color:#fff;text-align:center;font-weight:800;font-size:17px;padding:10px 14px}
+.votebar b{font-variant-numeric:tabular-nums;font-size:22px}
+.votebar.closed{background:var(--ink)}
+.show .showvote{position:absolute;top:10px;left:14px;z-index:4;background:var(--rose-deep);color:#fff;font-weight:800;border-radius:18px;padding:8px 16px;font-size:clamp(18px,2.2vw,26px);box-shadow:0 10px 30px rgba(0,0,0,.35)}
+.show .showvote b{font-size:clamp(28px,3.6vw,46px);font-variant-numeric:tabular-nums;display:inline-block;margin-left:6px}
+.show .showvote.closed{background:rgba(0,0,0,.55)}
 @media (max-width:480px){
   .tl:before{left:90px}
   .tl li{grid-template-columns:78px 1fr;gap:26px}
@@ -334,6 +340,7 @@ body.is-admin footer{padding-bottom:90px}
   </div>
 </header>
 
+<div class="votebar" id="voteBar" hidden></div>
 <div class="valsbar" id="valsBar" hidden>
   <span>💃 ¡Es el vals! Tómale fotos a Laura Michelle y súbelas.</span>
   <button class="btn rose" type="button" data-vals>Tomar foto del vals</button>
@@ -482,6 +489,7 @@ body.is-admin footer{padding-bottom:90px}
     <button class="btn close" id="closeShow" type="button">Cerrar</button>
   </div>
   <div class="new" id="showNew">¡Nueva!</div>
+  <div class="showvote" id="showVote" hidden></div>
   <div class="stage" id="stage"></div>
   <div class="bar">
     <div class="txt">
@@ -668,7 +676,8 @@ async function loadMsgs(){
 }
 async function loadRetraso(){
   if(!sb)return;
-  try{const r=await sb.from("control").select("retraso").eq("id",1).single();
+  try{const r=await sb.from("control").select("retraso,cierre_votos").eq("id",1).single();
+    if(r&&r.data){voteClose=r.data.cierre_votos?Date.parse(r.data.cierre_votos):null;tickVote();}
     if(r&&r.data&&typeof r.data.retraso==="number"&&r.data.retraso!==retraso){retraso=r.data.retraso;renderItin();autoMomento();if($("retrasoTxt"))$("retrasoTxt").textContent=retrasoLabel();}}catch(_){}
 }
 async function refresh(){
@@ -924,7 +933,9 @@ $("grid").addEventListener("click",async e=>{
   }
   const l=e.target.closest("button[data-like]");
   if(l){
-    const id=l.dataset.like;if(liked.has(id)){toast("Ya le diste ♥ a esta foto");return;}
+    const id=l.dataset.like;
+    if(!votingOpen()){toast("La votación ya cerró. ¡Gracias por votar!");return;}
+    if(liked.has(id)){toast("Ya le diste ♥ a esta foto");return;}
     const p=photos.find(x=>x.id===id);
     if(p&&p.reto){
       if(votos[p.reto]&&votos[p.reto]!==id){toast("Ya votaste en el reto “"+p.reto+"”. Tienes un voto por reto.");return;}
@@ -1060,8 +1071,9 @@ let rcSeq=null,rcT=null;
 async function pollRC(){
   if(!showOpen||!sb)return;
   try{
-    const r=await sb.from("control").select("seq,cmd,arg").eq("id",1).single();
+    const r=await sb.from("control").select("seq,cmd,arg,cierre_votos").eq("id",1).single();
     const d=r&&r.data;
+    if(d){voteClose=d.cierre_votos?Date.parse(d.cierre_votos):null;tickVote();}
     if(d){
       if(rcSeq===null)rcSeq=d.seq;
       else if(d.seq>rcSeq){rcSeq=d.seq;applyRC(d.cmd,d.arg);}
@@ -1098,6 +1110,25 @@ document.addEventListener("click",e=>{
 $("entradaYa").addEventListener("click",()=>setRetraso(realMins()-60));
 $("rcItin").addEventListener("click",()=>{const d=document.querySelector("details.admin");if(d){d.open=true;$("retrasoTxt").scrollIntoView({behavior:"smooth",block:"center"});}});
 $("retrasoTxt").textContent=retrasoLabel();
+
+/* ---------- Cierre de la votación con cuenta regresiva ---------- */
+let voteClose=null;
+const votingOpen=()=>!voteClose||Date.now()<voteClose;
+function tickVote(){
+  const bar=$("voteBar"),sv=$("showVote");
+  if(!voteClose){bar.hidden=true;sv.hidden=true;return;}
+  const ms=voteClose-Date.now();
+  if(ms>0){
+    const t=Math.ceil(ms/1000),txt=Math.floor(t/60)+":"+String(t%60).padStart(2,"0");
+    bar.className="votebar";bar.innerHTML="🗳️ La votación cierra en <b>"+txt+"</b> · ¡vota ya con ♥!";
+    sv.className="showvote";sv.innerHTML="🗳️ La votación cierra en<b>"+txt+"</b>";
+  }else{
+    bar.className="votebar closed";bar.textContent="🗳️ Votación cerrada · ¡gracias por votar!";
+    sv.className="showvote closed";sv.textContent="🗳️ Votación cerrada";
+  }
+  bar.hidden=false;sv.hidden=false;
+}
+setInterval(tickVote,250);
 
 /* ---------- Organizador ---------- */
 function setEditor(on){
