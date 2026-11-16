@@ -385,8 +385,8 @@ body.is-admin footer{padding-bottom:90px}
 
     <div class="lockcard" data-lock>🔒 El álbum se abre a las <b>8:00 p. m.</b> Vuelve cuando termine el conteo para subir tus fotos.</div>
     <form class="card" id="upForm" data-lockable>
-      <label class="pick" for="file"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-2.5h6L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.6"/></svg><span id="pickTxt">Toca para tomar o elegir una foto</span><span class="note">Cada foto se revisa antes de publicarse.</span>
-        <input type="file" id="file" accept="image/*">
+      <label class="pick" for="file"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-2.5h6L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.6"/></svg><span id="pickTxt">Toca para tomar o elegir fotos (puedes elegir varias)</span><span class="note">Cada foto se revisa antes de publicarse.</span>
+        <input type="file" id="file" accept="image/*" multiple>
       </label>
       <div class="row">
         <label class="f" for="upName">Pon tu nombre<input type="text" id="upName" maxlength="40" placeholder="Pon tu nombre"></label>
@@ -794,7 +794,8 @@ function quality(blob){
 }
 fileIn.addEventListener("change",()=>{forceUp=null;
   pendingFile=null;const f=fileIn.files[0];$("upNote").textContent="";$("upNote").className="note";
-  $("pickTxt").textContent=f?("Foto lista: "+f.name):"Toca para tomar o elegir una foto";
+  const nf=fileIn.files.length;
+  $("pickTxt").textContent=nf>1?(nf+" fotos listas para subir"):f?("Foto lista: "+f.name):"Toca para tomar o elegir una foto";
   if(f&&(f.type||"").startsWith("video")){$("upNote").textContent="Aquí solo se suben fotos. Elige una foto, por favor.";$("upNote").className="note err";}
   if(f&&f.type.startsWith("video")){
     if(f.size>MAX_MB*1048576){$("upNote").textContent="Este video pesa "+Math.round(f.size/1048576)+" MB. El máximo es "+MAX_MB+" MB: recórtalo en tu celular y elígelo otra vez.";$("upNote").className="note err";}
@@ -819,6 +820,7 @@ $("upForm").addEventListener("submit",async e=>{
   if(hasBad(nombre)){note.textContent=BAD_MSG;note.className="note err";return;}
   if(nombre)store.set("xv_nombre",nombre);
   autoMomento();
+  if(!pendingFile&&fileIn.files.length>1){await subirVarias([...fileIn.files],nombre);return;}
   $("upBtn").disabled=true;note.textContent=isV?"Revisando el video…":"Revisando la foto…";
   try{
     const blob=await shrink(f,2048,0.88);
@@ -851,6 +853,35 @@ $("upForm").addEventListener("submit",async e=>{
     note.textContent=isBadErr(err)?BAD_MSG:/row-level|security|403|Unauthorized/i.test(m)?"El álbum se llenó y ya no recibe más archivos. Avísale a los organizadores.":/size|large|exceed|413/i.test(m)?"El archivo es muy pesado. El máximo es "+MAX_MB+" MB.":/formato/.test(m)?"No pudimos leer esa foto. Prueba con otra o tómala de nuevo.":"No se pudo subir. Revisa tu conexión e inténtalo otra vez.";
   }finally{$("upBtn").disabled=false;}
 });
+
+/* ---------- Subir varias fotos a la vez ---------- */
+async function subirVarias(files,nombre){
+  const note=$("upNote");note.className="note";$("upBtn").disabled=true;
+  let ok=0,mal=0,err=0;
+  for(let i=0;i<files.length;i++){
+    const f=files[i];
+    note.textContent="Subiendo "+(i+1)+" de "+files.length+"… no cierres la página";
+    try{
+      if(!(f.type||"").startsWith("image")&&!/\.(jpe?g|png|webp|heic|heif)$/i.test(f.name||"")){err++;continue;}
+      const blob=await shrink(f,2048,0.88);
+      if(!blob||blob===f&&!/jpe?g/i.test(f.type||"")){err++;continue;}
+      let v="";try{v=await checkImage(blob);}catch(_){v="";}
+      if(v){mal++;continue;}
+      const thumb=await shrink(blob,480,0.8);
+      const base=Date.now()+"-"+Math.random().toString(36).slice(2,8),path="fotos/"+base+".jpg",tpath="mini/"+base+".jpg";
+      const up=await sb.storage.from("album").upload(path,blob,{contentType:"image/jpeg",upsert:false});
+      if(up.error)throw up.error;
+      const up2=await sb.storage.from("album").upload(tpath,thumb,{contentType:"image/jpeg",upsert:false});
+      const ins=await sb.from("fotos").insert({path,thumb:up2.error?null:tpath,tipo:"foto",ct:"image/jpeg",nombre,momento:$("upMom").value,reto:$("upReto").value||null});
+      if(ins.error)throw ins.error;
+      ok++;
+    }catch(_){err++;}
+  }
+  note.className=(mal||err)?"note err":"note";
+  note.textContent="¡Listo! Se subieron "+ok+" de "+files.length+" fotos."+(mal?" "+mal+" no se publicaron porque no son aptas para la página.":"")+(err?" "+err+" no se pudieron subir; inténtalo otra vez con esas.":"");
+  fileIn.value="";$("pickTxt").textContent="Toca para subir más fotos";$("upReto").value="";$("upBtn").disabled=false;
+  refresh();
+}
 
 /* ---------- Vals ---------- */
 const VALS_INI=80,VALS_FIN=110; // 9:20 p. m. a 9:50 p. m.
